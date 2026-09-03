@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>metrobox setup</title>
+<style>
+  :root {
+    --bg: #0d0f12;
+    --panel: #16191f;
+    --panel-hi: #1e222a;
+    --line: #2a2f39;
+    --text: #e8eaed;
+    --muted: #9aa3af;
+    --train: #ffb020;   /* the amber the display uses for arrivals */
+    --ok: #35c46b;
+    --err: #ff5c5c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 560px; margin: 0 auto; padding: 32px 20px 64px; }
+
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 32px; }
+
+  .step { margin-bottom: 28px; }
+  .step-label {
+    display: flex; align-items: baseline; gap: 8px;
+    font-size: 13px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--muted); margin-bottom: 10px;
+  }
+  .step-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--panel-hi); color: var(--text);
+    font-size: 11px; letter-spacing: 0; flex: none;
+  }
+
+  input {
+    width: 100%; padding: 12px 14px;
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px;
+    font-size: 16px; font-family: inherit;
+  }
+  input:focus { outline: none; border-color: var(--train); }
+  #code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 24px; letter-spacing: 0.1em; text-align: center;
+    color: var(--train);
+  }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 8px; }
+
+  #list {
+    margin-top: 10px; max-height: 340px; overflow-y: auto;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+  }
+  .station {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 14px; cursor: pointer;
+    border-bottom: 1px solid var(--line);
+  }
+  .station:last-child { border-bottom: none; }
+  .station:hover { background: var(--panel-hi); }
+  .station[aria-selected="true"] { background: var(--panel-hi); box-shadow: inset 3px 0 0 var(--train); }
+  .station-name { flex: 1; }
+  .station-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; color: var(--muted);
+  }
+  .chips { display: flex; gap: 4px; flex: none; }
+  .chip { width: 10px; height: 10px; border-radius: 50%; }
+
+  button {
+    width: 100%; padding: 14px; margin-top: 8px;
+    background: var(--train); color: #1a1206;
+    border: 0; border-radius: 8px;
+    font: 600 16px/1 inherit; cursor: pointer;
+  }
+  button:disabled { background: var(--panel-hi); color: var(--muted); cursor: not-allowed; }
+
+  .msg { margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-size: 14px; display: none; }
+  .msg.show { display: block; }
+  .msg.ok  { background: rgba(53,196,107,0.12); color: var(--ok); }
+  .msg.err { background: rgba(255,92,92,0.12); color: var(--err); }
+
+  /* Read-back of what the server will actually hand the device. */
+  #confirm { display: none; margin-top: 28px; }
+  #confirm.show { display: block; }
+  .readout {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px; color: var(--muted); line-height: 1.8;
+    overflow-x: auto; white-space: pre;
+  }
+  .readout b { color: var(--train); font-weight: 400; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Set up your metrobox</h1>
+  <p class="sub">Point your display at a station. It updates within a few seconds.</p>
+
+  <div class="step">
+    <div class="step-label"><span class="step-num">1</span> Code on your display</div>
+    <input id="code" placeholder="MB-000000" autocomplete="off" spellcheck="false"
+           inputmode="text" maxlength="9">
+    <div class="hint">Shown on screen when the display has no station yet.</div>
+  </div>
+
+  <div class="step">
+    <div class="step-label"><span class="step-num">2</span> WMATA station</div>
+    <input id="search" placeholder="Search stations…" autocomplete="off">
+    <div id="list"><div class="station"><span class="station-name">Loading stations…</span></div></div>
+  </div>
+
+  <button id="save" disabled>Select a station</button>
+  <div id="msg" class="msg"></div>
+
+  <div id="confirm">
+    <div class="step-label">What the display will fetch</div>
+    <div class="readout" id="readout"></div>
+  </div>
+</main>
+
+<script>
+// The only address this page hardcodes, same as the firmware. Everything else
+// comes back from discovery, so the readers stay movable.
+const DISCOVERY_URL = "https://pvjwz2rcl3.execute-api.us-east-1.amazonaws.com/api/discovery";
+const API_BASE = DISCOVERY_URL.replace(/\/api\/discovery$/, "");
+
+// Official WMATA line colours, keyed by the codes the station feed returns.
+// WMATA is the only system the server serves, and the station list below comes
+// from its station-info reader — so this page can only ever select a WMATA
+// station. When a second agency lands, this becomes a picker and the station
+// fetch keys off it; until then it stays a constant so there's one place to
+// change.
+const SYSTEM = "wmata";
+
+const LINE_COLORS = {
+  RD: "#BF0D3E", BL: "#009CDE", YL: "#FFD100",
+  OR: "#ED8B00", GR: "#00B140", SV: "#919D9D",
+};
+
+const $ = (id) => document.getElementById(id);
+let stations = [];      // [{code, name, lines}]
+let selected = null;
+
+function chipsFor(lines) {
+  return (lines || [])
+    .map((l) => `<span class="chip" style="background:${LINE_COLORS[l] || "#666"}" title="${l}"></span>`)
+    .join("");
+}
+
+function renderList(filter = "") {
+  const q = filter.trim().toLowerCase();
+  const shown = stations.filter(
+    (s) => !q || s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q)
+  );
+
+  if (!shown.length) {
+    $("list").innerHTML = `<div class="station"><span class="station-name">No station matches “${filter}”</span></div>`;
+    return;
+  }
+
+  $("list").innerHTML = shown
+    .map(
+      (s) => `<div class="station" role="option" data-code="${s.code}"
+                   aria-selected="${selected && selected.code === s.code}">
+                <span class="chips">${chipsFor(s.lines)}</span>
+                <span class="station-name">${s.name}</span>
+                <span class="station-code">${s.code}</span>
+              </div>`
+    )
+    .join("");
+
+  for (const el of $("list").children) {
+    el.onclick = () => {
+      selected = stations.find((s) => s.code === el.dataset.code);
+      renderList($("search").value);
+      refreshButton();
+    };
+  }
+}
+
+// Accept "482913", "mb-482913", "MB 482913" — all the ways someone reads a
+// code off a screen and types it back in.
+function normalizeCode(raw) {
+  let v = raw.trim().toUpperCase().replace(/[\s\-]/g, "");
+  if (/^\d{6}$/.test(v)) v = "MB" + v;
+  const m = v.match(/^MB(\d{6})$/);
+  return m ? `MB-${m[1]}` : null;
+}
+
+function refreshButton() {
+  const code = normalizeCode($("code").value);
+  const ready = Boolean(code && selected);
+  $("save").disabled = !ready;
+  $("save").textContent = ready
+    ? `Show ${selected.name} on ${code}`
+    : !selected ? "Select a station" : "Enter the code from your display";
+}
+
+function say(text, kind) {
+  const m = $("msg");
+  m.textContent = text;
+  m.className = `msg show ${kind}`;
+}
+
+async function boot() {
+  try {
+    const disc = await fetch(DISCOVERY_URL).then((r) => r.json());
+
+    const data = await fetch(disc.endpoints.stationInfo).then((r) => r.json());
+    stations = Object.entries(data)
+      .map(([code, s]) => ({ code, name: s.name, lines: s.lines || [] }))
+      .sort((a, b) => a.name.localeCompare(b.name) || a.code.localeCompare(b.code));
+
+    renderList();
+  } catch (err) {
+    $("list").innerHTML = `<div class="station"><span class="station-name">Couldn’t load stations — is the server up?</span></div>`;
+    say(`Station list failed: ${err.message}`, "err");
+  }
+}
+
+async function save() {
+  const code = normalizeCode($("code").value);
+  $("save").disabled = true;
+  // Drop any earlier read-back: it belongs to the previous code/station, and
+  // leaving it up next to an error reads as if the save had worked.
+  $("confirm").classList.remove("show");
+  say("Saving…", "ok");
+
+  try {
+    const res = await fetch(`${API_BASE}/api/devices/${encodeURIComponent(code)}/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system: SYSTEM,
+        stationId: selected.code,
+        stationName: selected.name,
+      }),
+    });
+
+    if (res.status === 404) {
+      // The device registers itself on boot, so an unknown code almost always
+      // means a typo — or a display that has never reached the server.
+      say("No display with that code. Check the code on the screen, and that it's online.", "err");
+      refreshButton();
+      return;
+    }
+    if (!res.ok) {
+      say(`Server said ${res.status}: ${await res.text()}`, "err");
+      refreshButton();
+      return;
+    }
+
+    say(`Saved. ${selected.name} — a display already showing a station can take up to a minute to switch.`, "ok");
+    confirmSaved(code);
+  } catch (err) {
+    say(`Couldn't reach the server: ${err.message}`, "err");
+  } finally {
+    refreshButton();
+  }
+}
+
+// Reads the config back through the exact route the device polls, so this
+// confirms what the server will hand over rather than echoing the form. There
+// is deliberately no live arrivals preview here: that endpoint is device-facing
+// (no CORS) and is the one metered by the ReaderInvocationSpike alarm.
+async function confirmSaved(code) {
+  const url = `${API_BASE}/api/devices/${encodeURIComponent(code)}/config`;
+  try {
+    const cfg = await fetch(url).then((r) => r.json());
+    $("readout").innerHTML =
+      `GET /api/devices/<b>${code}</b>/config\n` +
+      `  system      <b>${cfg.system}</b>\n` +
+      `  stationId   <b>${cfg.stationId}</b>\n` +
+      `  stationName <b>${cfg.stationName}</b>`;
+    $("confirm").classList.add("show");
+  } catch (err) {
+    say(`Saved, but couldn't read it back: ${err.message}`, "err");
+  }
+}
+
+$("search").oninput = (e) => renderList(e.target.value);
+$("code").oninput = refreshButton;
+$("save").onclick = save;
+boot();
+</script>
+</body>
+</html>
