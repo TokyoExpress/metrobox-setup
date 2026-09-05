@@ -17,6 +17,7 @@
     --err: #ff5c5c;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
     margin: 0;
     background: var(--bg);
@@ -194,11 +195,13 @@
     <div class="systems" id="systems" role="radiogroup" aria-labelledby="system-label"></div>
   </div>
 
-  <div class="step">
+  <!-- Hidden until a system is chosen: there is nothing to say in it before
+       then, and an empty box explaining why it is empty is just clutter. -->
+  <div class="step" id="station-step" hidden>
     <div class="step-label" id="station-label"><span class="step-num">3</span> <span id="station-noun">Station</span></div>
     <input id="search" placeholder="Search stations…" autocomplete="off"
            aria-labelledby="station-label" disabled>
-    <div id="list"><div class="station note"><span class="station-name">Pick a transit system first.</span></div></div>
+    <div id="list"><div class="station note"><span class="station-name">Loading stations…</span></div></div>
   </div>
 
   <button id="save" disabled>Save Configuration</button>
@@ -247,16 +250,16 @@ const MTA_DARK_TEXT = new Set(["N", "Q", "R", "W"]);
 const SYSTEMS = [
   {
     id: "wmata",
-    title: "WMATA - Metro Rail",
-    subtitle: "Washington, DC",
+    title: "Washington Metro Rail",
+    subtitle: "WMATA",
     noun: "Metro station",
     searchHint: "Search stations…",
     chip: (line) => dotChip(WMATA_COLORS[line] || "#666", line),
   },
   {
     id: "mta",
-    title: "MTA - New York City Subway",
-    subtitle: "New York, NY",
+    title: "New York City Subway",
+    subtitle: "MTA",
     noun: "Subway station",
     // Several New York stations share a name — there are four "86 St" — so the
     // bullets are how you tell them apart, and searching one is fair game.
@@ -331,6 +334,7 @@ async function selectSystem(id) {
   $("search").value = "";
   $("search").placeholder = system.searchHint;
   $("station-noun").textContent = system.noun;
+  $("station-step").hidden = false;
   renderSystems();
   refreshButton();
 
@@ -495,10 +499,12 @@ function readStationUrls(disc) {
 async function boot() {
   renderSystems();
 
+  let reached = true;
   try {
     const disc = await fetch(DISCOVERY_URL).then((r) => r.json());
     stationUrls = readStationUrls(disc);
   } catch (err) {
+    reached = false;
     say(`Couldn't reach the server: ${err.message}`, "err");
   }
 
@@ -507,7 +513,9 @@ async function boot() {
 
   const available = SYSTEMS.filter((s) => stationUrls[s.id]);
   if (!available.length) {
-    note("No transit systems are being served right now.");
+    // Only when the server answered and had nothing — otherwise this would
+    // paper over the more specific message the catch above just wrote.
+    if (reached) say("No transit systems are being served right now.", "err");
     return;
   }
   // With one system there is no choice to make, so don't make the user click
