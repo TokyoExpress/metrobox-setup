@@ -164,8 +164,8 @@
     background: var(--panel); color: var(--muted);
     cursor: not-allowed; opacity: 0.55;
   }
-  .system-city { display: block; font-weight: 600; font-size: 15px; }
-  .system-agency { display: block; font-size: 13px; color: var(--muted); }
+  .system-title { display: block; font-weight: 600; font-size: 15px; }
+  .system-subtitle { display: block; font-size: 13px; color: var(--muted); }
 
   .msg { margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-size: 14px; display: none; }
   .msg.show { display: block; }
@@ -247,16 +247,16 @@ const MTA_DARK_TEXT = new Set(["N", "Q", "R", "W"]);
 const SYSTEMS = [
   {
     id: "wmata",
-    city: "Washington, DC",
-    agency: "Metro",
+    title: "WMATA - Metro Rail",
+    subtitle: "Washington, DC",
     noun: "Metro station",
     searchHint: "Search stations…",
     chip: (line) => dotChip(WMATA_COLORS[line] || "#666", line),
   },
   {
     id: "mta",
-    city: "New York City",
-    agency: "Subway",
+    title: "MTA - New York City Subway",
+    subtitle: "New York, NY",
     noun: "Subway station",
     // Several New York stations share a name — there are four "86 St" — so the
     // bullets are how you tell them apart, and searching one is fair game.
@@ -308,8 +308,8 @@ function renderSystems() {
     return `<button type="button" class="system" role="radio" data-id="${s.id}"
                     aria-checked="${system !== null && system.id === s.id}"
                     ${ready ? "" : "disabled"}>
-              <span class="system-city">${esc(s.city)}</span>
-              <span class="system-agency">${ready ? esc(s.agency) : "Not available yet"}</span>
+              <span class="system-title">${esc(s.title)}</span>
+              <span class="system-subtitle">${ready ? esc(s.subtitle) : "Not available yet"}</span>
             </button>`;
   }).join("");
 
@@ -358,7 +358,7 @@ async function loadStations() {
 
   const url = stationUrls[id];
   if (!url) {
-    note(`${system.city} isn't being served yet.`);
+    note(`${system.title} isn't being served yet.`);
     return;
   }
 
@@ -371,7 +371,7 @@ async function loadStations() {
     // A system whose daily poller has never succeeded serves {} rather than
     // failing, which would otherwise read as "no stations match".
     if (!list.length) {
-      note(`No stations published for ${system.city} yet.`);
+      note(`No stations published for ${system.title} yet.`);
       return;
     }
 
