@@ -17,6 +17,7 @@
     --err: #ff5c5c;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
     margin: 0;
     background: var(--bg);
@@ -49,6 +50,7 @@
     font-size: 16px; font-family: inherit;
   }
   input:focus { outline: none; border-color: var(--train); }
+  input:disabled { color: var(--muted); cursor: not-allowed; }
   /* One field, with a ghost layer painting the MB- prefix and the remaining
      X placeholders. The input itself holds only the digits and renders its
      text transparent, so the real caret is the one you see.
@@ -111,8 +113,24 @@
   .station:hover { background: var(--panel-hi); }
   .station[aria-selected="true"] { background: var(--panel-hi); box-shadow: inset 3px 0 0 var(--train); }
   .station-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .chips { display: flex; gap: 4px; flex: none; }
-  .chip { width: 10px; height: 10px; border-radius: 50%; }
+  /* A row that is a message rather than a choice — "Loading…", "no match". */
+  .station.note { cursor: default; color: var(--muted); }
+  .station.note:hover { background: none; }
+
+  .chips { display: flex; gap: 4px; flex: none; align-items: center; }
+  /* WMATA lines are identified by colour alone, so a plain dot carries all of
+     it. MTA lines are not: 1/2/3 are one red and 4/5/6 one green, so the
+     letter has to be in the bullet or half of New York looks identical. */
+  .chip { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .chip.bullet {
+    width: 19px; height: 19px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font: 700 12px/1 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    color: #fff;
+  }
+  /* The MTA sets N/Q/R/W in black on yellow; everything else is white on a
+     dark fill. Same rule as getLineTextColor() in the firmware. */
+  .chip.bullet.on-light { color: #000; }
 
   button {
     width: 100%; padding: 14px; margin-top: 8px;
@@ -121,6 +139,34 @@
     font: 700 16px/1 inherit; cursor: pointer;
   }
   button:disabled { background: var(--panel-hi); color: var(--muted); cursor: not-allowed; }
+
+  /* Overrides the block above, so it has to come after it. */
+  /* Driven by the space there actually is rather than a viewport breakpoint:
+     the tiles sit two-up wherever both fit and stack when they don't, which is
+     also what happens if a third system is ever added. */
+  .systems {
+    display: grid; gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+  .system {
+    width: auto; margin: 0; padding: 13px 14px;
+    text-align: left;
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px;
+    font: inherit; cursor: pointer;
+  }
+  .system:hover:not(:disabled) { background: var(--panel-hi); }
+  .system[aria-checked="true"] {
+    background: var(--panel-hi);
+    border-color: var(--train);
+    box-shadow: inset 3px 0 0 var(--train);
+  }
+  .system:disabled {
+    background: var(--panel); color: var(--muted);
+    cursor: not-allowed; opacity: 0.55;
+  }
+  .system-title { display: block; font-weight: 600; font-size: 15px; }
+  .system-subtitle { display: block; font-size: 13px; color: var(--muted); }
 
   .msg { margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-size: 14px; display: none; }
   .msg.show { display: block; }
@@ -145,9 +191,17 @@
   </div>
 
   <div class="step">
-    <div class="step-label"><span class="step-num">2</span> WMATA station</div>
-    <input id="search" placeholder="Search stations…" autocomplete="off">
-    <div id="list"><div class="station"><span class="station-name">Loading stations…</span></div></div>
+    <div class="step-label" id="system-label"><span class="step-num">2</span> Transit system</div>
+    <div class="systems" id="systems" role="radiogroup" aria-labelledby="system-label"></div>
+  </div>
+
+  <!-- Hidden until a system is chosen: there is nothing to say in it before
+       then, and an empty box explaining why it is empty is just clutter. -->
+  <div class="step" id="station-step" hidden>
+    <div class="step-label" id="station-label"><span class="step-num">3</span> <span id="station-noun">Station</span></div>
+    <input id="search" placeholder="Search stations…" autocomplete="off"
+           aria-labelledby="station-label" disabled>
+    <div id="list"><div class="station note"><span class="station-name">Loading stations…</span></div></div>
   </div>
 
   <button id="save" disabled>Save Configuration</button>
@@ -161,44 +215,207 @@ const DISCOVERY_URL = "https://pvjwz2rcl3.execute-api.us-east-1.amazonaws.com/ap
 const API_BASE = DISCOVERY_URL.replace(/\/api\/discovery$/, "");
 
 // Official WMATA line colours, keyed by the codes the station feed returns.
-// WMATA is the only system the server serves, and the station list below comes
-// from its station-info reader — so this page can only ever select a WMATA
-// station. When a second agency lands, this becomes a picker and the station
-// fetch keys off it; until then it stays a constant so there's one place to
-// change.
-const SYSTEM = "wmata";
-
-const LINE_COLORS = {
+const WMATA_COLORS = {
   RD: "#BF0D3E", BL: "#009CDE", YL: "#FFD100",
   OR: "#ED8B00", GR: "#00B140", SV: "#919D9D",
 };
 
+// MTA trunk-line colours, keyed by the single-character bullet the station
+// feed returns. The groupings are the ones getMTALineArrivalsColor() in
+// metrobox_utils.cpp uses, so a station's bullets here are the bullets its
+// display draws; the panel is 16-bit and rounds these, which is the only
+// difference (MTA_RED 0xE9A5 is #EE352E after the round trip).
+const MTA_COLORS = {
+  "1": "#EE352E", "2": "#EE352E", "3": "#EE352E",                    // MTA_RED
+  "4": "#00933C", "5": "#00933C", "6": "#00933C",                    // MTA_GREEN
+  "7": "#B933AD",                                                    // MTA_PURPLE
+  "A": "#0039A6", "C": "#0039A6", "E": "#0039A6",                    // MTA_BLUE
+  "B": "#FF6319", "D": "#FF6319", "F": "#FF6319", "M": "#FF6319",    // MTA_ORANGE
+  "G": "#6CBE45",                                                    // MTA_LTGREEN
+  "J": "#996633", "Z": "#996633",                                    // MTA_BROWN
+  "L": "#A7A9AC",                                                    // MTA_GREY
+  "N": "#FCCC0A", "Q": "#FCCC0A", "R": "#FCCC0A", "W": "#FCCC0A",    // MTA_YELLOW
+  "S": "#808183",                                                    // MTA_SHUTTLE
+};
+const MTA_DARK_TEXT = new Set(["N", "Q", "R", "W"]);
+
+// The systems this page knows how to present. Which of them a user can
+// actually pick is decided by discovery — an entry with no station-info URL
+// renders disabled rather than silently missing, because "New York isn't
+// there" is a deployment state worth seeing rather than a blank space.
+//
+// "id" is the string POSTed as "system" and the key discovery files a system
+// under; it is also what systemFromName() in the firmware matches on, so all
+// three have to agree.
+const SYSTEMS = [
+  {
+    id: "wmata",
+    title: "Washington Metro Rail",
+    subtitle: "WMATA",
+    noun: "Metro station",
+    searchHint: "Search stations…",
+    chip: (line) => dotChip(WMATA_COLORS[line] || "#666", line),
+  },
+  {
+    id: "mta",
+    title: "New York City Subway",
+    subtitle: "MTA",
+    noun: "Subway station",
+    // Several New York stations share a name — there are four "86 St" — so the
+    // bullets are how you tell them apart, and searching one is fair game.
+    searchHint: "Search by station or line…",
+    chip: (line) => bulletChip(MTA_COLORS[line] || "#666", line),
+    searchLines: true,
+  },
+];
+
 const $ = (id) => document.getElementById(id);
-let stations = [];      // [{code, name, lines}]
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]
+  );
+}
+
+// Numeric-aware, because most of the New York list is street numbers and a
+// plain sort files "103 St" between "10 Av" and "104 St".
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+let system = null;              // entry from SYSTEMS
+let stationUrls = {};           // system id -> station-info URL from discovery
+let stationCache = {};          // system id -> [{code, name, lines}]
+let stations = [];              // the list currently on screen
 let selected = null;
 
+function dotChip(color, line) {
+  return `<span class="chip" style="background:${color}" title="${esc(line)}"></span>`;
+}
+
+function bulletChip(color, line) {
+  const dark = MTA_DARK_TEXT.has(line) ? " on-light" : "";
+  return `<span class="chip bullet${dark}" style="background:${color}" title="${esc(line)}">${esc(line)}</span>`;
+}
+
 function chipsFor(lines) {
-  return (lines || [])
-    .map((l) => `<span class="chip" style="background:${LINE_COLORS[l] || "#666"}" title="${l}"></span>`)
-    .join("");
+  if (!system) return "";
+  return (lines || []).map(system.chip).join("");
+}
+
+// ------------------------------------------------------------------ systems
+
+function renderSystems() {
+  $("systems").innerHTML = SYSTEMS.map((s) => {
+    // Before discovery answers, nothing is known to be missing yet, so tiles
+    // stay live rather than flashing disabled and back.
+    const ready = !discoveryDone || Boolean(stationUrls[s.id]);
+    return `<button type="button" class="system" role="radio" data-id="${s.id}"
+                    aria-checked="${system !== null && system.id === s.id}"
+                    ${ready ? "" : "disabled"}>
+              <span class="system-title">${esc(s.title)}</span>
+              <span class="system-subtitle">${ready ? esc(s.subtitle) : "Not available yet"}</span>
+            </button>`;
+  }).join("");
+
+  for (const el of $("systems").children) {
+    el.onclick = () => selectSystem(el.dataset.id);
+  }
+}
+
+async function selectSystem(id) {
+  const next = SYSTEMS.find((s) => s.id === id);
+  if (!next || (system && system.id === id)) return;
+
+  system = next;
+  selected = null;
+  stations = [];
+  // Any standing message referred to the system being left — a "Saved!" for a
+  // station in another city is worse than no message at all.
+  clearMessage();
+  $("search").value = "";
+  $("search").placeholder = system.searchHint;
+  $("station-noun").textContent = system.noun;
+  $("station-step").hidden = false;
+  renderSystems();
+  refreshButton();
+
+  await loadStations();
+}
+
+// ----------------------------------------------------------------- stations
+
+function note(text) {
+  $("list").innerHTML = `<div class="station note"><span class="station-name">${esc(text)}</span></div>`;
+}
+
+async function loadStations() {
+  const id = system.id;
+
+  if (stationCache[id]) {
+    stations = stationCache[id];
+    renderList();
+    $("search").disabled = false;
+    return;
+  }
+
+  $("search").disabled = true;
+  note("Loading stations…");
+
+  const url = stationUrls[id];
+  if (!url) {
+    note(`${system.title} isn't being served yet.`);
+    return;
+  }
+
+  try {
+    const data = await fetch(url).then((r) => r.json());
+    const list = Object.entries(data)
+      .map(([code, s]) => ({ code, name: s.name, lines: s.lines || [] }))
+      .sort((a, b) => collator.compare(a.name, b.name) || collator.compare(a.code, b.code));
+
+    // A system whose daily poller has never succeeded serves {} rather than
+    // failing, which would otherwise read as "no stations match".
+    if (!list.length) {
+      note(`No stations published for ${system.title} yet.`);
+      return;
+    }
+
+    stationCache[id] = list;
+    // The await above means another tile may have been clicked meanwhile;
+    // caching is still worth keeping, drawing the stale list is not.
+    if (system.id !== id) return;
+
+    stations = list;
+    renderList();
+    $("search").disabled = false;
+  } catch (err) {
+    if (system.id !== id) return;
+    note("Couldn't load stations — is the server up?");
+    say(`Station list failed: ${err.message}`, "err");
+  }
+}
+
+function matches(s, q) {
+  if (!q) return true;
+  if (s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q)) return true;
+  // Only where a bullet is a name a rider would type: "Q" as a WMATA station
+  // code fragment is noise, as a New York line it is the whole point.
+  return Boolean(system.searchLines) && (s.lines || []).some((l) => l.toLowerCase() === q);
 }
 
 function renderList(filter = "") {
   const q = filter.trim().toLowerCase();
-  const shown = stations.filter(
-    (s) => !q || s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q)
-  );
+  const shown = stations.filter((s) => matches(s, q));
 
   if (!shown.length) {
-    $("list").innerHTML = `<div class="station"><span class="station-name">No station matches “${filter}”</span></div>`;
+    note(`No station matches “${filter}”`);
     return;
   }
 
   $("list").innerHTML = shown
     .map(
-      (s) => `<div class="station" role="option" data-code="${s.code}"
-                   aria-selected="${selected && selected.code === s.code}">
-                <span class="station-name">${s.name}</span>
+      (s) => `<div class="station" role="option" data-code="${esc(s.code)}"
+                   aria-selected="${selected !== null && selected.code === s.code}">
+                <span class="station-name">${esc(s.name)}</span>
                 <span class="chips">${chipsFor(s.lines)}</span>
               </div>`
     )
@@ -212,6 +429,8 @@ function renderList(filter = "") {
     };
   }
 }
+
+// --------------------------------------------------------------------- code
 
 const CODE_DIGITS = 6;
 
@@ -238,7 +457,7 @@ function syncCode() {
 
 function refreshButton() {
   const code = codeValue();
-  const ready = Boolean(code && selected);
+  const ready = Boolean(code && system && selected);
   $("save").disabled = !ready;
   $("save").textContent = "Save Configuration";
 }
@@ -249,21 +468,62 @@ function say(text, kind) {
   m.className = `msg show ${kind}`;
 }
 
+function clearMessage() {
+  const m = $("msg");
+  m.textContent = "";
+  m.className = "msg";
+}
+
+// ---------------------------------------------------------------- discovery
+
+let discoveryDone = false;
+
+// Discovery gained a "systems" map when MTA landed and stayed at schema
+// version 1, because the change is additive: the top-level endpoints are still
+// the WMATA pair and still mean what they always did. A stack that has not
+// been redeployed since serves the old shape, so fall back to it rather than
+// showing an empty picker.
+function readStationUrls(disc) {
+  const urls = {};
+  const systems = disc.systems || {};
+  for (const s of SYSTEMS) {
+    const entry = systems[s.id];
+    if (entry && entry.stationInfo) urls[s.id] = entry.stationInfo;
+  }
+  if (!urls.wmata && disc.endpoints && disc.endpoints.stationInfo) {
+    urls.wmata = disc.endpoints.stationInfo;
+  }
+  return urls;
+}
+
 async function boot() {
+  renderSystems();
+
+  let reached = true;
   try {
     const disc = await fetch(DISCOVERY_URL).then((r) => r.json());
-
-    const data = await fetch(disc.endpoints.stationInfo).then((r) => r.json());
-    stations = Object.entries(data)
-      .map(([code, s]) => ({ code, name: s.name, lines: s.lines || [] }))
-      .sort((a, b) => a.name.localeCompare(b.name) || a.code.localeCompare(b.code));
-
-    renderList();
+    stationUrls = readStationUrls(disc);
   } catch (err) {
-    $("list").innerHTML = `<div class="station"><span class="station-name">Couldn’t load stations — is the server up?</span></div>`;
-    say(`Station list failed: ${err.message}`, "err");
+    reached = false;
+    say(`Couldn't reach the server: ${err.message}`, "err");
   }
+
+  discoveryDone = true;
+  renderSystems();
+
+  const available = SYSTEMS.filter((s) => stationUrls[s.id]);
+  if (!available.length) {
+    // Only when the server answered and had nothing — otherwise this would
+    // paper over the more specific message the catch above just wrote.
+    if (reached) say("No transit systems are being served right now.", "err");
+    return;
+  }
+  // With one system there is no choice to make, so don't make the user click
+  // through it. This is the WMATA-only flow the page had before New York.
+  if (available.length === 1) await selectSystem(available[0].id);
 }
+
+// ------------------------------------------------------------------- saving
 
 async function save() {
   const code = codeValue();
@@ -275,7 +535,7 @@ async function save() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        system: SYSTEM,
+        system: system.id,
         stationId: selected.code,
         stationName: selected.name,
       }),
