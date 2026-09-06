@@ -239,6 +239,17 @@ const MTA_COLORS = {
 };
 const MTA_DARK_TEXT = new Set(["N", "Q", "R", "W"]);
 
+// BART line colours. BART names its lines by colour, so the single-character
+// codes the station feed serves are the colour itself. Same round-trip note as
+// the MTA palette above: the panel is 16-bit and rounds these (BART_RED 0xE8E4
+// is #ED1C24 landing on #EE1C20), and BART_* in metrobox_utils.h is the same
+// set.
+const BART_COLORS = {
+  R: "#ED1C24", O: "#FF9933", Y: "#FFFF33", G: "#4DB848", B: "#00AEEF",
+};
+// Yellow on a dark card is a light chip like the MTA's N/Q/R/W, but these are
+// plain dots with no label on them, so nothing needs the dark-text treatment.
+
 // The systems this page knows how to present. Which of them a user can
 // actually pick is decided by discovery — an entry with no station-info URL
 // renders disabled rather than silently missing, because "New York isn't
@@ -266,6 +277,14 @@ const SYSTEMS = [
     searchHint: "Search by station or line…",
     chip: (line) => bulletChip(MTA_COLORS[line] || "#666", line),
     searchLines: true,
+  },
+  {
+    id: "bart",
+    title: "Bay Area Rapid Transit",
+    subtitle: "BART",
+    noun: "BART station",
+    searchHint: "Search stations…",
+    chip: (line) => dotChip(BART_COLORS[line] || "#666", line),
   },
 ];
 
@@ -501,7 +520,14 @@ async function boot() {
 
   let reached = true;
   try {
-    const disc = await fetch(DISCOVERY_URL).then((r) => r.json());
+    // no-store because discovery is served with max-age=86400, which is aimed
+    // at the displays: they cache it for a day on purpose, since a device that
+    // re-asks on every arrivals poll is the expensive thing. A browser has no
+    // such reason — it reads this once per visit and it is a few hundred bytes
+    // — and honouring that header meant a newly deployed system kept rendering
+    // as "Not available yet" for up to a day after it went live, to exactly the
+    // people most likely to be looking for it.
+    const disc = await fetch(DISCOVERY_URL, { cache: "no-store" }).then((r) => r.json());
     stationUrls = readStationUrls(disc);
   } catch (err) {
     reached = false;
