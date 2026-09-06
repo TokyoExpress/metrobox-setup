@@ -141,12 +141,11 @@
   button:disabled { background: var(--panel-hi); color: var(--muted); cursor: not-allowed; }
 
   /* Overrides the block above, so it has to come after it. */
-  /* Driven by the space there actually is rather than a viewport breakpoint:
-     the tiles sit two-up wherever both fit and stack when they don't, which is
-     also what happens if a third system is ever added. */
+  /* One system per row, full width, however many systems there are: the list
+     reads top to bottom and a third system just adds another row. */
   .systems {
     display: grid; gap: 10px;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    grid-template-columns: 1fr;
   }
   .system {
     width: auto; margin: 0; padding: 13px 14px;
@@ -154,6 +153,10 @@
     background: var(--panel); color: var(--text);
     border: 1px solid var(--line); border-radius: 8px;
     font: inherit; cursor: pointer;
+    /* Title and subtitle sit side by side on the row, and drop to two lines
+       only when the row is too narrow to hold both. */
+    display: flex; flex-wrap: wrap; align-items: baseline;
+    gap: 4px 10px;
   }
   .system:hover:not(:disabled) { background: var(--panel-hi); }
   .system[aria-checked="true"] {
@@ -165,8 +168,8 @@
     background: var(--panel); color: var(--muted);
     cursor: not-allowed; opacity: 0.55;
   }
-  .system-title { display: block; font-weight: 600; font-size: 15px; }
-  .system-subtitle { display: block; font-size: 13px; color: var(--muted); }
+  .system-title { font-weight: 600; font-size: 15px; }
+  .system-subtitle { font-size: 13px; color: var(--muted); }
 
   .msg { margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-size: 14px; display: none; }
   .msg.show { display: block; }
