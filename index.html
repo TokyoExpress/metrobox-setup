@@ -118,19 +118,23 @@
   .station.note:hover { background: none; }
 
   .chips { display: flex; gap: 4px; flex: none; align-items: center; }
-  /* WMATA lines are identified by colour alone, so a plain dot carries all of
-     it. MTA lines are not: 1/2/3 are one red and 4/5/6 one green, so the
-     letter has to be in the bullet or half of New York looks identical. */
+  /* One shape per system. WMATA lines are identified by colour alone, so a
+     plain dot carries all of it. MTA and BART both need the letter — 1/2/3 are
+     one red and 4/5/6 one green, and BART's codes *are* the colours — which is
+     the same split displayStationLines() makes in the firmware. */
   .chip { width: 10px; height: 10px; border-radius: 50%; flex: none; }
-  .chip.bullet {
+  .chip.bullet, .chip.tile {
     width: 19px; height: 19px;
     display: inline-flex; align-items: center; justify-content: center;
     font: 700 12px/1 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
     color: #fff;
   }
-  /* The MTA sets N/Q/R/W in black on yellow; everything else is white on a
-     dark fill. Same rule as getLineTextColor() in the firmware. */
-  .chip.bullet.on-light { color: #000; }
+  /* 2px, the same radius the panel rounds these to (line_shape_corner_radius
+     is 2 for BART in every DisplayProfile). */
+  .chip.tile { border-radius: 2px; }
+  /* Black on the light fills — the MTA's N/Q/R/W yellow, BART's yellow and
+     orange; white on everything else. Same rule as getLineTextColor(). */
+  .chip.on-light { color: #000; }
 
   button {
     width: 100%; padding: 14px; margin-top: 8px;
@@ -142,10 +146,38 @@
 
   /* Overrides the block above, so it has to come after it. */
   /* One system per row, full width, however many systems there are: the list
-     reads top to bottom and a third system just adds another row. */
+     reads top to bottom and another system just adds another row.
+
+     Capped and scrolled past roughly five rows. Left uncapped, the page grew a
+     screenful of chrome above step 3 as systems were added, which pushed the
+     station picker — the part with the actual work in it — below the fold. The
+     cap is deliberately not a whole number of rows: a half-visible card is what
+     says "there is more here" without needing a scrollbar to be drawn. */
   .systems {
     display: grid; gap: 10px;
     grid-template-columns: 1fr;
+    max-height: 292px; overflow-y: auto;
+    /* Room for the selected card's inset marker and any overlay scrollbar, so
+       neither sits on top of the text. */
+    padding-right: 4px;
+    /* Overlay scrollbars on macOS only appear while scrolling, so the cap on
+       its own left no sign the list continued. The mask fades whichever edge
+       has content beyond it — half a faded card reads as "more this way" at a
+       glance, which turned out to be enough on its own: this replaced a pair
+       of explicit page-up/page-down buttons in the step label. Both edges are
+       square when neither class is set, so a list that fits is untouched. */
+    --fade: 28px;
+    mask-image: linear-gradient(to bottom, #000 0, #000 100%);
+  }
+  .systems.can-up:not(.can-down) {
+    mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade));
+  }
+  .systems.can-down:not(.can-up) {
+    mask-image: linear-gradient(to top, transparent 0, #000 var(--fade));
+  }
+  .systems.can-up.can-down {
+    mask-image: linear-gradient(to bottom, transparent 0, #000 var(--fade),
+                                #000 calc(100% - var(--fade)), transparent 100%);
   }
   .system {
     width: auto; margin: 0; padding: 13px 14px;
@@ -194,14 +226,14 @@
   </div>
 
   <div class="step">
-    <div class="step-label" id="system-label"><span class="step-num">2</span> Transit system</div>
+    <div class="step-label"><span class="step-num">2</span> <span id="system-label">Select transit system</span></div>
     <div class="systems" id="systems" role="radiogroup" aria-labelledby="system-label"></div>
   </div>
 
   <!-- Hidden until a system is chosen: there is nothing to say in it before
        then, and an empty box explaining why it is empty is just clutter. -->
   <div class="step" id="station-step" hidden>
-    <div class="step-label" id="station-label"><span class="step-num">3</span> <span id="station-noun">Station</span></div>
+    <div class="step-label" id="station-label"><span class="step-num">3</span> Select station</div>
     <input id="search" placeholder="Search stations…" autocomplete="off"
            aria-labelledby="station-label" disabled>
     <div id="list"><div class="station note"><span class="station-name">Loading stations…</span></div></div>
@@ -250,8 +282,16 @@ const MTA_DARK_TEXT = new Set(["N", "Q", "R", "W"]);
 const BART_COLORS = {
   R: "#ED1C24", O: "#FF9933", Y: "#FFFF33", G: "#4DB848", B: "#00AEEF",
 };
-// Yellow on a dark card is a light chip like the MTA's N/Q/R/W, but these are
-// plain dots with no label on them, so nothing needs the dark-text treatment.
+// The codes are the colour names, so the letter on the tile is R/O/Y/G/B.
+// Yellow and orange are the light fills here — the same call getLineTextColor()
+// makes on the panel — and take black text; the rest are white.
+const BART_DARK_TEXT = new Set(["Y", "O"]);
+// Spectrum order, matching LINE_CODES in the bart_station_info poller, which
+// is where the order is really decided — the firmware draws the blob's list as
+// it arrives. Repeated here so the picker is right during the window where the
+// deployed blob still holds the old route_id order (the daily rule can be up
+// to 24h from re-running), and harmless once it doesn't.
+const BART_ORDER = ["R", "O", "Y", "G", "B"];
 
 // The systems this page knows how to present. Which of them a user can
 // actually pick is decided by discovery — an entry with no station-info URL
@@ -260,13 +300,21 @@ const BART_COLORS = {
 //
 // "id" is the string POSTed as "system" and the key discovery files a system
 // under; it is also what systemFromName() in the firmware matches on, so all
-// three have to agree.
+// three have to agree. Two agencies run two systems each, so the id is the
+// system and not the operator: "wmata" is the rail network it has always been
+// and the bus network is "wmata_bus", which keeps every already-paired display
+// pointing where it was pointing.
+//
+// Entries below with `chip: null` have no poller yet — they render disabled
+// until discovery serves them, and their line codes are whatever that poller
+// ends up writing. The palette is deliberately not guessed here: getLineColor()
+// in the firmware has to agree with it code for code, so it is decided once,
+// when there is a feed to read it from.
 const SYSTEMS = [
   {
     id: "wmata",
     title: "Washington Metro Rail",
     subtitle: "WMATA",
-    noun: "Metro station",
     searchHint: "Search stations…",
     chip: (line) => dotChip(WMATA_COLORS[line] || "#666", line),
   },
@@ -274,7 +322,6 @@ const SYSTEMS = [
     id: "mta",
     title: "New York City Subway",
     subtitle: "MTA",
-    noun: "Subway station",
     // Several New York stations share a name — there are four "86 St" — so the
     // bullets are how you tell them apart, and searching one is fair game.
     searchHint: "Search by station or line…",
@@ -285,11 +332,79 @@ const SYSTEMS = [
     id: "bart",
     title: "Bay Area Rapid Transit",
     subtitle: "BART",
-    noun: "BART station",
     searchHint: "Search stations…",
-    chip: (line) => dotChip(BART_COLORS[line] || "#666", line),
+    chip: (line) => tileChip(BART_COLORS[line] || "#666", line),
+    lineOrder: BART_ORDER,
+  },
+
+  // ---- Not served yet. Titles are what a rider in that city calls the thing,
+  // since that is what the picker is read as.
+  {
+    id: "septa",
+    title: "Philadelphia Metro",
+    subtitle: "SEPTA",
+    searchHint: "Search stations…",
+    chip: null,
+  },
+  {
+    id: "wmata_bus",
+    title: "Washington Metro Bus",
+    subtitle: "WMATA",
+    searchHint: "Search stops…",
+    // A bus stop is served by however many routes happen to pass it, and the
+    // route names are not a small fixed set the way a rail network's are.
+    // Whatever these get, it will not be the rail bullet.
+    chip: null,
+  },
+  {
+    id: "mbta",
+    title: "Boston Subway",
+    subtitle: "MBTA",
+    searchHint: "Search stations…",
+    chip: null,
+  },
+  {
+    id: "cta",
+    title: "Chicago L",
+    subtitle: "CTA",
+    searchHint: "Search stations…",
+    chip: null,
+  },
+  {
+    id: "lacmta",
+    title: "Los Angeles Metro Rail",
+    subtitle: "LACMTA",
+    searchHint: "Search stations…",
+    chip: null,
+  },
+  {
+    id: "mta_bus",
+    title: "New York City Bus",
+    subtitle: "MTA",
+    searchHint: "Search stops…",
+    chip: null,
   },
 ];
+
+// Alphabetical by title, which is the only order that stays sensible as this
+// list grows — the original three were in the order they were built, and that
+// is not a fact a rider looking for their city knows.
+//
+// localeCompare rather than the numeric-aware collator below: these are city
+// names with no digits in them, and the collator is declared further down —
+// this runs at load, before that binding exists.
+SYSTEMS.sort((a, b) => a.title.localeCompare(b.title));
+
+// What the picker actually draws: everything served first, then everything
+// not, each half still alphabetical. With most of the list unbuilt, plain
+// alphabetical buried the three real choices among six dead ones — Boston and
+// Chicago sat above New York. The base order above is what this falls back to
+// before discovery answers, when nothing is known to be missing yet.
+function systemsInPickerOrder() {
+  if (!discoveryDone) return SYSTEMS;
+  const rank = (s) => (stationUrls[s.id] ? 0 : 1);
+  return SYSTEMS.slice().sort((a, b) => rank(a) - rank(b));
+}
 
 const $ = (id) => document.getElementById(id);
 
@@ -318,15 +433,33 @@ function bulletChip(color, line) {
   return `<span class="chip bullet${dark}" style="background:${color}" title="${esc(line)}">${esc(line)}</span>`;
 }
 
+function tileChip(color, line) {
+  const dark = BART_DARK_TEXT.has(line) ? " on-light" : "";
+  return `<span class="chip tile${dark}" style="background:${color}" title="${esc(line)}">${esc(line)}</span>`;
+}
+
 function chipsFor(lines) {
-  if (!system) return "";
-  return (lines || []).map(system.chip).join("");
+  // No chip renderer means the system's line codes aren't known yet — draw the
+  // name on its own rather than a row of grey unknowns.
+  if (!system || !system.chip) return "";
+  let ordered = lines || [];
+  if (system.lineOrder) {
+    // Unknown codes keep their relative place at the end rather than being
+    // dropped or sorted to the front — a new line the page hasn't been told
+    // about should still show up.
+    const rank = (c) => {
+      const i = system.lineOrder.indexOf(c);
+      return i === -1 ? system.lineOrder.length : i;
+    };
+    ordered = ordered.slice().sort((a, b) => rank(a) - rank(b));
+  }
+  return ordered.map(system.chip).join("");
 }
 
 // ------------------------------------------------------------------ systems
 
 function renderSystems() {
-  $("systems").innerHTML = SYSTEMS.map((s) => {
+  $("systems").innerHTML = systemsInPickerOrder().map((s) => {
     // Before discovery answers, nothing is known to be missing yet, so tiles
     // stay live rather than flashing disabled and back.
     const ready = !discoveryDone || Boolean(stationUrls[s.id]);
@@ -341,6 +474,25 @@ function renderSystems() {
   for (const el of $("systems").children) {
     el.onclick = () => selectSystem(el.dataset.id);
   }
+
+  // Replacing innerHTML resets the container's scrollTop, and the container
+  // scrolls now — so picking a system below the fold would re-render and jump
+  // the list back to the top, taking the card you just clicked out of view.
+  const checked = $("systems").querySelector('[aria-checked="true"]');
+  if (checked) checked.scrollIntoView({ block: "nearest" });
+
+  refreshSystemsScroll();
+}
+
+// ---- which edges of the list have more content past them
+
+function refreshSystemsScroll() {
+  const box = $("systems");
+  const max = box.scrollHeight - box.clientHeight;
+  // Sub-pixel layout means scrollTop rarely lands exactly on 0 or max.
+  const overflows = max > 1;
+  box.classList.toggle("can-up", overflows && box.scrollTop > 1);
+  box.classList.toggle("can-down", overflows && box.scrollTop < max - 1);
 }
 
 async function selectSystem(id) {
@@ -355,7 +507,6 @@ async function selectSystem(id) {
   clearMessage();
   $("search").value = "";
   $("search").placeholder = system.searchHint;
-  $("station-noun").textContent = system.noun;
   $("station-step").hidden = false;
   renderSystems();
   refreshButton();
@@ -609,6 +760,12 @@ syncCode();
 
 $("search").oninput = (e) => renderList(e.target.value);
 $("save").onclick = save;
+
+$("systems").addEventListener("scroll", refreshSystemsScroll, { passive: true });
+// A narrower window wraps card titles onto two lines, which changes whether
+// the list overflows at all.
+window.addEventListener("resize", refreshSystemsScroll);
+
 boot();
 </script>
 </body>
