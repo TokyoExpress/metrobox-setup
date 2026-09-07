@@ -209,22 +209,57 @@
      three boards, not nine, and there is nothing below it to push off-screen. */
   .designs { display: grid; gap: 10px; grid-template-columns: 1fr; }
 
-  /* Switches belonging to the selected board sit under the picker in the same
-     card language, so the step reads as one set of display settings rather
-     than a picker with a stray checkbox after it. Spaced by the same 10px the
-     picker uses between its own cards. */
-  .switches { display: grid; gap: 10px; grid-template-columns: 1fr; margin-top: 10px; }
-  /* .system lays title and subtitle out side by side and lets them wrap. A
-     switch has a third thing to place and a subtitle long enough that it will
-     always wrap, so this pins the state to the top-right corner and gives the
-     subtitle the full width underneath rather than leaving the three to find
-     their own order. */
-  .system.switch { display: grid; grid-template-columns: 1fr auto; align-items: baseline; }
-  .system.switch .system-subtitle { grid-column: 1 / -1; }
-  .switch-state { font-size: 13px; font-weight: 600; color: var(--muted); }
-  /* On is the state worth colouring: it is the one that puts movement on the
-     display, so it should be the one you can see at a glance from the form. */
-  .system.switch[aria-checked="true"] .switch-state { color: var(--train); }
+  /* Step 4 holds two unrelated kinds of control — which board to draw, and how
+     that board behaves — so each gets its own heading. Subordinate to the step
+     label above it: same size and weight, but sentence case rather than the
+     tracked-out caps, so the two never read as peers. */
+  .section + .section { margin-top: 20px; }
+  .section-label {
+    font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 10px;
+  }
+
+  /* These are not boards, so they must not wear the boards' card. The
+     constraint predates them: a single "Flash arriving trains" row in .system's
+     border and panel fill sat directly under the picker in the picker's own
+     language and read as a third design to choose. Three of them, immediately
+     below two real cards, would read as five.
+
+     So the box is dropped and the state is carried by a radio mark, which
+     nothing above has — the design picker states itself with a border and a
+     fill and no mark at all. Two controls, two vocabularies, and the marks are
+     also what says these three are one choice rather than three switches. */
+  .effects { display: grid; gap: 2px; grid-template-columns: 1fr; }
+  .effect {
+    width: auto; margin: 0; padding: 8px 2px 8px 0;
+    text-align: left; background: none; border: 0;
+    font: inherit; color: var(--text); cursor: pointer;
+    display: grid; grid-template-columns: auto 1fr; align-items: start;
+    gap: 1px 12px;
+  }
+  .effect:focus-visible { outline: 2px solid var(--train); outline-offset: 2px; border-radius: 8px; }
+  /* Every cell placed by hand. The mark is the only child with a row span, and
+     auto-placement resolves those first: left implicit, it took the whole first
+     column and pushed the title out beside it. */
+  .effect .system-title { grid-column: 2; grid-row: 1; font-weight: 500; }
+  .effect .system-subtitle { grid-column: 2; grid-row: 2; }
+  .mark {
+    grid-column: 1; grid-row: 1 / span 2;
+    position: relative; flex: none;
+    width: 17px; height: 17px; border-radius: 50%;
+    border: 1px solid var(--line); background: var(--panel);
+    /* Centred on the title rather than on the two lines together: the title is
+       the line the mark belongs to, and centring on the pair left it floating
+       between them on the options with a subtitle. */
+    align-self: start; margin-top: 3px;
+    transition: border-color 0.15s;
+  }
+  .mark::after {
+    content: ""; position: absolute; inset: 3px;
+    border-radius: 50%; background: var(--train);
+    transform: scale(0); transition: transform 0.15s;
+  }
+  .effect[aria-checked="true"] .mark { border-color: var(--train); }
+  .effect[aria-checked="true"] .mark::after { transform: scale(1); }
 
   .msg { margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-size: 14px; display: none; }
   .msg.show { display: block; }
@@ -266,19 +301,19 @@
        New York today. A step offering a single choice is not a choice, and
        drawing it would put a dead control between the station list and Save. -->
   <div class="step" id="design-step" hidden>
-    <div class="step-label" id="design-label"><span class="step-num">4</span> Display Settings</div>
-    <div class="designs" id="designs" role="radiogroup" aria-labelledby="design-label"></div>
+    <div class="step-label"><span class="step-num">4</span> Display Settings</div>
+
+    <div class="section">
+      <div class="section-label" id="design-label">Display style</div>
+      <div class="designs" id="designs" role="radiogroup" aria-labelledby="design-label"></div>
+    </div>
 
     <!-- Settings that belong to the board selected above rather than to the
          system, so they appear and disappear with it. Hidden whenever the
-         chosen board has nothing to switch. -->
-    <div class="switches" id="switches" hidden>
-      <button type="button" class="system switch" id="blink" role="switch" aria-checked="true">
-        <span class="system-title">Flash arriving trains</span>
-        <span class="switch-state" id="blink-state">On</span>
-        <span class="system-subtitle">A train due now flashes its row. Turn this off to
-          call it out with the outline alone.</span>
-      </button>
+         chosen board has nothing to set. -->
+    <div class="section" id="effects-section" hidden>
+      <div class="section-label" id="effects-label">Display effect for shortly arriving trains</div>
+      <div class="effects" id="effects" role="radiogroup" aria-labelledby="effects-label"></div>
     </div>
   </div>
 
@@ -360,6 +395,26 @@ const SYSTEMS = [
     subtitle: "WMATA",
     searchHint: "Search stations…",
     chip: (line) => dotChip(WMATA_COLORS[line] || "#666", line),
+    // Retro is listed first because the first entry is what a device that has
+    // never been given a design draws, and every WMATA display in the field
+    // has been drawing the character rows since before there was a choice.
+    // That ordering is the opposite of New York's below for the same reason:
+    // there, the modern board is what shipped.
+    designs: [
+      {
+        id: "classic",
+        title: "Retro",
+        subtitle: "TODO put images here",
+      },
+      {
+        id: "modern",
+        title: "Modern",
+        subtitle: "TODO put images here",
+        // No arrivingEffect: WMATA's own signs say BRD in the column where the
+        // wait goes, so the board already calls an arriving train out where a
+        // rider is looking and there is no effect to choose between.
+      },
+    ],
   },
   {
     id: "mta",
@@ -370,18 +425,18 @@ const SYSTEMS = [
     searchHint: "Search by station or line…",
     chip: (line) => bulletChip(MTA_COLORS[line] || "#666", line),
     searchLines: true,
-    // New York is the only system with two boards today. The first entry is
-    // the system's default and is what a device that has never been given a
-    // design already draws, so leaving this step alone changes nothing.
+    // The first entry is the system's default and is what a device that has
+    // never been given a design already draws, so leaving this step alone
+    // changes nothing. For New York that is the modern board.
     designs: [
       {
         id: "default",
         title: "Modern",
         subtitle: "TODO put images here",
-        // This board calls out an arriving train by flashing its row, and is
-        // the only one that does — the retro rows have no equivalent — so the
-        // switch for it hangs off the design rather than off the system.
-        blink: true,
+        // This board marks an arriving train, and is the only one that does —
+        // the retro rows have no equivalent — so the choice of *how* hangs off
+        // the design rather than off the system.
+        arrivingEffect: true,
       },
       {
         id: "classic",
@@ -490,16 +545,16 @@ let selected = null;
 // then left out of the POST entirely rather than sent empty, so a system with
 // no choice to make writes nothing about designs.
 let design = null;
-// Whether the chosen board should flash a row whose train is arriving. Only
-// meaningful for a board that has such a flash, and left out of the POST
-// entirely when the chosen one does not — see blinkApplies().
+// How the chosen board should call out a train that is arriving. Only
+// meaningful for a board that marks one at all, and left out of the POST
+// entirely when the chosen one does not — see effectApplies().
 //
-// True to start, like the device: this page writes a configuration, it does
+// "flash" to start, like the device: this page writes a configuration, it does
 // not read the one already on the display, so every control here begins at its
 // default and a save states the whole selection. Same as `design` above, which
 // also goes back to the system's first board rather than to whatever the
 // device happens to be drawing.
-let blinkArriving = true;
+let arrivingEffect = "flash";
 
 function dotChip(color, line) {
   return `<span class="chip" style="background:${color}" title="${esc(line)}"></span>`;
@@ -607,7 +662,7 @@ function renderDesigns() {
   $("design-step").hidden = options.length < 2;
   if (options.length < 2) {
     $("designs").innerHTML = "";
-    renderSwitches();
+    renderEffects();
     return;
   }
 
@@ -623,7 +678,7 @@ function renderDesigns() {
     el.onclick = () => selectDesign(el.dataset.id);
   }
 
-  renderSwitches();
+  renderEffects();
 }
 
 function selectDesign(id) {
@@ -636,32 +691,70 @@ function selectDesign(id) {
 
 // ---- settings belonging to the selected board rather than to the system
 
-// Whether the chosen board has an arriving flash to switch at all. The POST
-// asks the same question, so both sides agree without either restating which
-// board that is.
-function blinkApplies() {
+// The ids are the strings the server stores and the firmware parses, so this
+// list is the setting — a fourth entry here is a change to all three at once.
+//
+// Ordered as a ladder rather than by preference: each option takes an element
+// away from the one above it, which is also why the flash cannot be had
+// without the outline. The outline is the still half of the flash, not a
+// separate mark that could be turned off under it.
+const ARRIVING_EFFECTS = [
+  {
+    id: "flash",
+    title: "Outline + flash",
+  },
+  {
+    id: "outline",
+    title: "Outline only",
+  },
+  {
+    id: "none",
+    title: "No effect",
+  },
+];
+
+// Whether the chosen board marks an arriving train at all. The POST asks the
+// same question, so both sides agree without either restating which board that
+// is.
+function effectApplies() {
   const options = (system && system.designs) || [];
   const chosen = options.find((d) => d.id === design);
-  return Boolean(chosen && chosen.blink);
+  return Boolean(chosen && chosen.arrivingEffect);
 }
 
-function renderSwitches() {
-  const applies = blinkApplies();
-  // The container, not the button: hiding the button alone would leave the
-  // grid's 10px above it as a gap under the picker with nothing in it.
-  $("switches").hidden = !applies;
-  if (!applies) return;
-  $("blink").setAttribute("aria-checked", String(blinkArriving));
-  $("blink-state").textContent = blinkArriving ? "On" : "Off";
+function renderEffects() {
+  const applies = effectApplies();
+  // The section, not the group: hiding the group alone would leave the
+  // "Arriving trains" heading standing over nothing.
+  $("effects-section").hidden = !applies;
+  if (!applies) {
+    // Emptied rather than left in place, so a board switched away from does not
+    // keep a hidden radio group holding the previous selection's markup.
+    $("effects").innerHTML = "";
+    return;
+  }
+
+  $("effects").innerHTML = ARRIVING_EFFECTS.map((e) =>
+    `<button type="button" class="effect" role="radio" data-id="${esc(e.id)}"
+             aria-checked="${arrivingEffect === e.id}">
+       <span class="mark" aria-hidden="true"></span>
+       <span class="system-title">${esc(e.title)}</span>
+     </button>`
+  ).join("");
+
+  for (const el of $("effects").children) {
+    el.onclick = () => selectEffect(el.dataset.id);
+  }
 }
 
-$("blink").onclick = () => {
-  blinkArriving = !blinkArriving;
+function selectEffect(id) {
+  if (arrivingEffect === id) return;
+  arrivingEffect = id;
   // Any standing "Saved!" described the display as it was configured a moment
   // ago, which is no longer what this form says.
   clearMessage();
-  renderSwitches();
-};
+  renderEffects();
+}
 
 // ----------------------------------------------------------------- stations
 
@@ -871,10 +964,14 @@ async function save() {
         // and the firmware reads as "this system's default" — the same thing
         // every device configured before this step existed already holds.
         ...(design === null ? {} : { design }),
-        // Left out for a board with no arriving flash, which the server takes
-        // as "say nothing about it" and leaves whatever is stored alone —
+        // Left out for a board that marks no arriving train, which the server
+        // takes as "say nothing about it" and leaves whatever is stored alone —
         // saving a retro board must not decide anything about the modern one.
-        ...(blinkApplies() ? { blinkArriving } : {}),
+        //
+        // The boolean this replaced, `blinkArriving`, is deliberately not sent
+        // beside it: the server derives that for the firmware still asking for
+        // it, and it cannot express "no effect" anyway.
+        ...(effectApplies() ? { arrivingEffect } : {}),
       }),
     });
 
