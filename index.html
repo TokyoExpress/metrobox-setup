@@ -203,6 +203,11 @@
   .system-title { font-weight: 600; font-size: 15px; }
   .system-subtitle { font-size: 13px; color: var(--muted); }
 
+  /* The design picker reuses .system's card, so the two pickers read as the
+     same control. It has no scroll cap of its own: a system offers two or
+     three boards, not nine, and there is nothing below it to push off-screen. */
+  .designs { display: grid; gap: 10px; grid-template-columns: 1fr; }
+
   .msg { margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-size: 14px; display: none; }
   .msg.show { display: block; }
   .msg.ok  { background: rgba(53,196,107,0.12); color: var(--ok); }
@@ -237,6 +242,14 @@
     <input id="search" placeholder="Search stations…" autocomplete="off"
            aria-labelledby="station-label" disabled>
     <div id="list"><div class="station note"><span class="station-name">Loading stations…</span></div></div>
+  </div>
+
+  <!-- Hidden for every system with only one board, which is all of them but
+       New York today. A step offering a single choice is not a choice, and
+       drawing it would put a dead control between the station list and Save. -->
+  <div class="step" id="design-step" hidden>
+    <div class="step-label" id="design-label"><span class="step-num">4</span> Display Settings</div>
+    <div class="designs" id="designs" role="radiogroup" aria-labelledby="design-label"></div>
   </div>
 
   <button id="save" disabled>Save Configuration</button>
@@ -327,6 +340,21 @@ const SYSTEMS = [
     searchHint: "Search by station or line…",
     chip: (line) => bulletChip(MTA_COLORS[line] || "#666", line),
     searchLines: true,
+    // New York is the only system with two boards today. The first entry is
+    // the system's default and is what a device that has never been given a
+    // design already draws, so leaving this step alone changes nothing.
+    designs: [
+      {
+        id: "default",
+        title: "Direction board",
+        subtitle: "Two trains, large — like the new platform screens",
+      },
+      {
+        id: "classic",
+        title: "Classic rows",
+        subtitle: "Four trains as flip-board text rows",
+      },
+    ],
   },
   {
     id: "bart",
@@ -423,6 +451,11 @@ let stationUrls = {};           // system id -> station-info URL from discovery
 let stationCache = {};          // system id -> [{code, name, lines}]
 let stations = [];              // the list currently on screen
 let selected = null;
+// Which board the chosen system should draw. Null for a system that offers
+// only one, which is the same thing as "the system's default" — the field is
+// then left out of the POST entirely rather than sent empty, so a system with
+// no choice to make writes nothing about designs.
+let design = null;
 
 function dotChip(color, line) {
   return `<span class="chip" style="background:${color}" title="${esc(line)}"></span>`;
@@ -502,6 +535,11 @@ async function selectSystem(id) {
   system = next;
   selected = null;
   stations = [];
+  // Back to the new system's default board rather than carrying the last
+  // system's pick across — "classic" chosen for New York means nothing in
+  // Washington, and would be wrong again on the way back if New York's
+  // default ever moves.
+  design = next.designs ? next.designs[0].id : null;
   // Any standing message referred to the system being left — a "Saved!" for a
   // station in another city is worse than no message at all.
   clearMessage();
@@ -509,9 +547,44 @@ async function selectSystem(id) {
   $("search").placeholder = system.searchHint;
   $("station-step").hidden = false;
   renderSystems();
+  renderDesigns();
   refreshButton();
 
   await loadStations();
+}
+
+// ------------------------------------------------------------------ designs
+
+function renderDesigns() {
+  const options = (system && system.designs) || [];
+  // One option is not a choice; none is not a step. Either way there is
+  // nothing to draw, and the container is left empty so a system switched away
+  // from doesn't leave its boards behind it.
+  $("design-step").hidden = options.length < 2;
+  if (options.length < 2) {
+    $("designs").innerHTML = "";
+    return;
+  }
+
+  $("designs").innerHTML = options.map((d) =>
+    `<button type="button" class="system" role="radio" data-id="${esc(d.id)}"
+             aria-checked="${design === d.id}">
+       <span class="system-title">${esc(d.title)}</span>
+       <span class="system-subtitle">${esc(d.subtitle)}</span>
+     </button>`
+  ).join("");
+
+  for (const el of $("designs").children) {
+    el.onclick = () => selectDesign(el.dataset.id);
+  }
+}
+
+function selectDesign(id) {
+  if (design === id) return;
+  design = id;
+  // Any standing "Saved!" was for the board that was selected a moment ago.
+  clearMessage();
+  renderDesigns();
 }
 
 // ----------------------------------------------------------------- stations
@@ -718,6 +791,10 @@ async function save() {
         system: system.id,
         stationId: selected.code,
         stationName: selected.name,
+        // Omitted for a system with one board, which the server stores as ""
+        // and the firmware reads as "this system's default" — the same thing
+        // every device configured before this step existed already holds.
+        ...(design === null ? {} : { design }),
       }),
     });
 
