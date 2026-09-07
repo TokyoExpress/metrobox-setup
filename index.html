@@ -209,22 +209,52 @@
      three boards, not nine, and there is nothing below it to push off-screen. */
   .designs { display: grid; gap: 10px; grid-template-columns: 1fr; }
 
-  /* Switches belonging to the selected board sit under the picker in the same
-     card language, so the step reads as one set of display settings rather
-     than a picker with a stray checkbox after it. Spaced by the same 10px the
-     picker uses between its own cards. */
-  .switches { display: grid; gap: 10px; grid-template-columns: 1fr; margin-top: 10px; }
-  /* .system lays title and subtitle out side by side and lets them wrap. A
-     switch has a third thing to place and a subtitle long enough that it will
-     always wrap, so this pins the state to the top-right corner and gives the
-     subtitle the full width underneath rather than leaving the three to find
-     their own order. */
-  .system.switch { display: grid; grid-template-columns: 1fr auto; align-items: baseline; }
-  .system.switch .system-subtitle { grid-column: 1 / -1; }
-  .switch-state { font-size: 13px; font-weight: 600; color: var(--muted); }
+  /* Step 4 holds two unrelated kinds of control — which board to draw, and how
+     that board behaves — so each gets its own heading. Subordinate to the step
+     label above it: same size and weight, but sentence case rather than the
+     tracked-out caps, so the two never read as peers. */
+  .section + .section { margin-top: 20px; }
+  .section-label {
+    font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 10px;
+  }
+
+  /* A switch is not one of the boards, so it must not wear their card. Sharing
+     .system's border and panel fill put "Flash arriving trains" in the picker's
+     own language directly under it, and it read as a third design to choose.
+     This row drops the box entirely and states its value with a real switch,
+     which nothing above it has. */
+  .toggle-row {
+    width: auto; margin: 0; padding: 2px 2px 2px 0;
+    text-align: left; background: none; border: 0;
+    font: inherit; color: var(--text); cursor: pointer;
+    display: grid; grid-template-columns: 1fr auto; align-items: center;
+    gap: 2px 14px;
+  }
+  .toggle-row:focus-visible { outline: 2px solid var(--train); outline-offset: 4px; border-radius: 8px; }
+  /* Every cell placed by hand. The switch is the only child with a row span,
+     and auto-placement resolves those first: left implicit, it took column 1
+     and pushed the title out beside it. */
+  .toggle-row .system-title { grid-column: 1; grid-row: 1; }
+  /* Full width under the title rather than beside the switch, which would
+     otherwise squeeze it into a column a few words wide. */
+  .toggle-row .system-subtitle { grid-column: 1; grid-row: 2; }
+  .toggle {
+    grid-column: 2; grid-row: 1 / span 2; align-self: center;
+    position: relative;
+    width: 44px; height: 26px; border-radius: 13px;
+    background: var(--panel-hi); border: 1px solid var(--line);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .toggle::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--muted);
+    transition: transform 0.15s, background 0.15s;
+  }
   /* On is the state worth colouring: it is the one that puts movement on the
      display, so it should be the one you can see at a glance from the form. */
-  .system.switch[aria-checked="true"] .switch-state { color: var(--train); }
+  .toggle-row[aria-checked="true"] .toggle { background: var(--train); border-color: var(--train); }
+  .toggle-row[aria-checked="true"] .toggle::after { transform: translateX(18px); background: #fff; }
 
   .msg { margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-size: 14px; display: none; }
   .msg.show { display: block; }
@@ -266,16 +296,21 @@
        New York today. A step offering a single choice is not a choice, and
        drawing it would put a dead control between the station list and Save. -->
   <div class="step" id="design-step" hidden>
-    <div class="step-label" id="design-label"><span class="step-num">4</span> Display Settings</div>
-    <div class="designs" id="designs" role="radiogroup" aria-labelledby="design-label"></div>
+    <div class="step-label"><span class="step-num">4</span> Display Settings</div>
+
+    <div class="section">
+      <div class="section-label" id="design-label">Display style</div>
+      <div class="designs" id="designs" role="radiogroup" aria-labelledby="design-label"></div>
+    </div>
 
     <!-- Settings that belong to the board selected above rather than to the
          system, so they appear and disappear with it. Hidden whenever the
          chosen board has nothing to switch. -->
-    <div class="switches" id="switches" hidden>
-      <button type="button" class="system switch" id="blink" role="switch" aria-checked="true">
+    <div class="section" id="switches" hidden>
+      <div class="section-label">Options</div>
+      <button type="button" class="toggle-row" id="blink" role="switch" aria-checked="true">
         <span class="system-title">Flash arriving trains</span>
-        <span class="switch-state" id="blink-state">On</span>
+        <span class="toggle" aria-hidden="true"></span>
         <span class="system-subtitle">A train due now flashes its row. Turn this off to
           call it out with the outline alone.</span>
       </button>
@@ -647,12 +682,12 @@ function blinkApplies() {
 
 function renderSwitches() {
   const applies = blinkApplies();
-  // The container, not the button: hiding the button alone would leave the
-  // grid's 10px above it as a gap under the picker with nothing in it.
+  // The section, not the button: hiding the button alone would leave the
+  // "Options" heading standing over nothing.
   $("switches").hidden = !applies;
   if (!applies) return;
+  // The switch draws its own state off this, so there is nothing else to set.
   $("blink").setAttribute("aria-checked", String(blinkArriving));
-  $("blink-state").textContent = blinkArriving ? "On" : "Off";
 }
 
 $("blink").onclick = () => {
