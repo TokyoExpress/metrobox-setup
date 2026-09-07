@@ -157,8 +157,7 @@
     display: grid; gap: 10px;
     grid-template-columns: 1fr;
     max-height: 292px; overflow-y: auto;
-    /* Room for the selected card's inset marker and any overlay scrollbar, so
-       neither sits on top of the text. */
+    /* Room for an overlay scrollbar, so it does not sit on top of the text. */
     padding-right: 4px;
     /* Overlay scrollbars on macOS only appear while scrolling, so the cap on
        its own left no sign the list continued. The mask fades whichever edge
@@ -191,10 +190,12 @@
     gap: 4px 10px;
   }
   .system:hover:not(:disabled) { background: var(--panel-hi); }
+  /* Border only, the same 1px on all four sides. An inset left bar used to sit
+     inside the border too, which stacked into a 4px left edge against 1px
+     everywhere else and read as a lopsided box. */
   .system[aria-checked="true"] {
     background: var(--panel-hi);
     border-color: var(--train);
-    box-shadow: inset 3px 0 0 var(--train);
   }
   .system:disabled {
     background: var(--panel); color: var(--muted);
@@ -346,13 +347,13 @@ const SYSTEMS = [
     designs: [
       {
         id: "default",
-        title: "Direction board",
-        subtitle: "Two trains, large — like the new platform screens",
+        title: "Modern",
+        subtitle: "TODO put images here",
       },
       {
         id: "classic",
-        title: "Classic rows",
-        subtitle: "Four trains as flip-board text rows",
+        title: "Retro",
+        subtitle: "TODO put images here",
       },
     ],
   },
