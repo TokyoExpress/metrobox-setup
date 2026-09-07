@@ -209,6 +209,23 @@
      three boards, not nine, and there is nothing below it to push off-screen. */
   .designs { display: grid; gap: 10px; grid-template-columns: 1fr; }
 
+  /* Switches belonging to the selected board sit under the picker in the same
+     card language, so the step reads as one set of display settings rather
+     than a picker with a stray checkbox after it. Spaced by the same 10px the
+     picker uses between its own cards. */
+  .switches { display: grid; gap: 10px; grid-template-columns: 1fr; margin-top: 10px; }
+  /* .system lays title and subtitle out side by side and lets them wrap. A
+     switch has a third thing to place and a subtitle long enough that it will
+     always wrap, so this pins the state to the top-right corner and gives the
+     subtitle the full width underneath rather than leaving the three to find
+     their own order. */
+  .system.switch { display: grid; grid-template-columns: 1fr auto; align-items: baseline; }
+  .system.switch .system-subtitle { grid-column: 1 / -1; }
+  .switch-state { font-size: 13px; font-weight: 600; color: var(--muted); }
+  /* On is the state worth colouring: it is the one that puts movement on the
+     display, so it should be the one you can see at a glance from the form. */
+  .system.switch[aria-checked="true"] .switch-state { color: var(--train); }
+
   .msg { margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-size: 14px; display: none; }
   .msg.show { display: block; }
   .msg.ok  { background: rgba(53,196,107,0.12); color: var(--ok); }
@@ -251,6 +268,18 @@
   <div class="step" id="design-step" hidden>
     <div class="step-label" id="design-label"><span class="step-num">4</span> Display Settings</div>
     <div class="designs" id="designs" role="radiogroup" aria-labelledby="design-label"></div>
+
+    <!-- Settings that belong to the board selected above rather than to the
+         system, so they appear and disappear with it. Hidden whenever the
+         chosen board has nothing to switch. -->
+    <div class="switches" id="switches" hidden>
+      <button type="button" class="system switch" id="blink" role="switch" aria-checked="true">
+        <span class="system-title">Flash arriving trains</span>
+        <span class="switch-state" id="blink-state">On</span>
+        <span class="system-subtitle">A train due now flashes its row. Turn this off to
+          call it out with the outline alone.</span>
+      </button>
+    </div>
   </div>
 
   <button id="save" disabled>Save Configuration</button>
@@ -349,6 +378,10 @@ const SYSTEMS = [
         id: "default",
         title: "Modern",
         subtitle: "TODO put images here",
+        // This board calls out an arriving train by flashing its row, and is
+        // the only one that does — the retro rows have no equivalent — so the
+        // switch for it hangs off the design rather than off the system.
+        blink: true,
       },
       {
         id: "classic",
@@ -457,6 +490,16 @@ let selected = null;
 // then left out of the POST entirely rather than sent empty, so a system with
 // no choice to make writes nothing about designs.
 let design = null;
+// Whether the chosen board should flash a row whose train is arriving. Only
+// meaningful for a board that has such a flash, and left out of the POST
+// entirely when the chosen one does not — see blinkApplies().
+//
+// True to start, like the device: this page writes a configuration, it does
+// not read the one already on the display, so every control here begins at its
+// default and a save states the whole selection. Same as `design` above, which
+// also goes back to the system's first board rather than to whatever the
+// device happens to be drawing.
+let blinkArriving = true;
 
 function dotChip(color, line) {
   return `<span class="chip" style="background:${color}" title="${esc(line)}"></span>`;
@@ -564,6 +607,7 @@ function renderDesigns() {
   $("design-step").hidden = options.length < 2;
   if (options.length < 2) {
     $("designs").innerHTML = "";
+    renderSwitches();
     return;
   }
 
@@ -578,6 +622,8 @@ function renderDesigns() {
   for (const el of $("designs").children) {
     el.onclick = () => selectDesign(el.dataset.id);
   }
+
+  renderSwitches();
 }
 
 function selectDesign(id) {
@@ -587,6 +633,35 @@ function selectDesign(id) {
   clearMessage();
   renderDesigns();
 }
+
+// ---- settings belonging to the selected board rather than to the system
+
+// Whether the chosen board has an arriving flash to switch at all. The POST
+// asks the same question, so both sides agree without either restating which
+// board that is.
+function blinkApplies() {
+  const options = (system && system.designs) || [];
+  const chosen = options.find((d) => d.id === design);
+  return Boolean(chosen && chosen.blink);
+}
+
+function renderSwitches() {
+  const applies = blinkApplies();
+  // The container, not the button: hiding the button alone would leave the
+  // grid's 10px above it as a gap under the picker with nothing in it.
+  $("switches").hidden = !applies;
+  if (!applies) return;
+  $("blink").setAttribute("aria-checked", String(blinkArriving));
+  $("blink-state").textContent = blinkArriving ? "On" : "Off";
+}
+
+$("blink").onclick = () => {
+  blinkArriving = !blinkArriving;
+  // Any standing "Saved!" described the display as it was configured a moment
+  // ago, which is no longer what this form says.
+  clearMessage();
+  renderSwitches();
+};
 
 // ----------------------------------------------------------------- stations
 
@@ -796,6 +871,10 @@ async function save() {
         // and the firmware reads as "this system's default" — the same thing
         // every device configured before this step existed already holds.
         ...(design === null ? {} : { design }),
+        // Left out for a board with no arriving flash, which the server takes
+        // as "say nothing about it" and leaves whatever is stored alone —
+        // saving a retro board must not decide anything about the modern one.
+        ...(blinkApplies() ? { blinkArriving } : {}),
       }),
     });
 
