@@ -395,17 +395,10 @@ const SYSTEMS = [
     subtitle: "WMATA",
     searchHint: "Search stations…",
     chip: (line) => dotChip(WMATA_COLORS[line] || "#666", line),
-    // Retro is listed first because the first entry is what a device that has
-    // never been given a design draws, and every WMATA display in the field
-    // has been drawing the character rows since before there was a choice.
-    // That ordering is the opposite of New York's below for the same reason:
-    // there, the modern board is what shipped.
+    // The first entry is the default, and it is the modern board for the same
+    // reason it is in New York: a system with two boards leads with the newer
+    // one everywhere, so this list's order is the same shape in every city.
     designs: [
-      {
-        id: "classic",
-        title: "Retro",
-        subtitle: "TODO put images here",
-      },
       {
         id: "modern",
         title: "Modern",
@@ -413,6 +406,11 @@ const SYSTEMS = [
         // No arrivingEffect: WMATA's own signs say BRD in the column where the
         // wait goes, so the board already calls an arriving train out where a
         // rider is looking and there is no effect to choose between.
+      },
+      {
+        id: "classic",
+        title: "Retro",
+        subtitle: "TODO put images here",
       },
     ],
   },
@@ -427,10 +425,10 @@ const SYSTEMS = [
     searchLines: true,
     // The first entry is the system's default and is what a device that has
     // never been given a design already draws, so leaving this step alone
-    // changes nothing. For New York that is the modern board.
+    // changes nothing.
     designs: [
       {
-        id: "default",
+        id: "modern",
         title: "Modern",
         subtitle: "TODO put images here",
         // This board marks an arriving train, and is the only one that does —
