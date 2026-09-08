@@ -395,10 +395,16 @@ const SYSTEMS = [
     subtitle: "WMATA",
     searchHint: "Search stations…",
     chip: (line) => dotChip(WMATA_COLORS[line] || "#666", line),
-    // The first entry is the default, and it is the modern board for the same
-    // reason it is in New York: a system with two boards leads with the newer
-    // one everywhere, so this list's order is the same shape in every city.
+    // The first entry is the default, and here it is the retro rows rather
+    // than the modern board — Washington leads with the rows. The order is
+    // per-system on purpose: which board a city leads with is a fact about
+    // that city, not a shape this list repeats everywhere.
     designs: [
+      {
+        id: "classic",
+        title: "Retro",
+        subtitle: "TODO put images here",
+      },
       {
         id: "modern",
         title: "Modern",
@@ -406,11 +412,6 @@ const SYSTEMS = [
         // No arrivingEffect: WMATA's own signs say BRD in the column where the
         // wait goes, so the board already calls an arriving train out where a
         // rider is looking and there is no effect to choose between.
-      },
-      {
-        id: "classic",
-        title: "Retro",
-        subtitle: "TODO put images here",
       },
     ],
   },
