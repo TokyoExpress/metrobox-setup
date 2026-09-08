@@ -209,6 +209,16 @@
      three boards, not nine, and there is nothing below it to push off-screen. */
   .designs { display: grid; gap: 10px; grid-template-columns: 1fr; }
 
+  /* The still sits under the cards it describes and is deliberately not one:
+     no border and no panel fill, or a third card appears below the two real
+     ones. The frame keeps the box's height while the next image decodes, so
+     switching boards doesn't jump the Save button up the page. */
+  .preview { margin: 10px 0 0; aspect-ratio: 5 / 2; }
+  .preview img {
+    display: block; width: 100%; height: 100%;
+    object-fit: contain; border-radius: 8px;
+  }
+
   /* Step 4 holds two unrelated kinds of control — which board to draw, and how
      that board behaves — so each gets its own heading. Subordinate to the step
      label above it: same size and weight, but sentence case rather than the
@@ -306,6 +316,12 @@
     <div class="section">
       <div class="section-label" id="design-label">Display style</div>
       <div class="designs" id="designs" role="radiogroup" aria-labelledby="design-label"></div>
+      <!-- What the selected board actually looks like on the device. Hidden
+           rather than left blank when a board ships without a still, so the
+           step never holds an empty frame. -->
+      <figure class="preview" id="design-preview" hidden>
+        <img id="design-preview-img" alt="">
+      </figure>
     </div>
 
     <!-- Settings that belong to the board selected above rather than to the
@@ -403,12 +419,12 @@ const SYSTEMS = [
       {
         id: "classic",
         title: "Retro",
-        subtitle: "TODO put images here",
+        preview: "previews/wmata-retro.png",
       },
       {
         id: "modern",
         title: "Modern",
-        subtitle: "TODO put images here",
+        preview: "previews/wmata-modern.png",
         // No arrivingEffect: WMATA's own signs say BRD in the column where the
         // wait goes, so the board already calls an arriving train out where a
         // rider is looking and there is no effect to choose between.
@@ -431,7 +447,7 @@ const SYSTEMS = [
       {
         id: "modern",
         title: "Modern",
-        subtitle: "TODO put images here",
+        preview: "previews/mta-modern.png",
         // This board marks an arriving train, and is the only one that does —
         // the retro rows have no equivalent — so the choice of *how* hangs off
         // the design rather than off the system.
@@ -440,7 +456,7 @@ const SYSTEMS = [
       {
         id: "classic",
         title: "Retro",
-        subtitle: "TODO put images here",
+        preview: "previews/mta-retro.png",
       },
     ],
   },
@@ -661,6 +677,7 @@ function renderDesigns() {
   $("design-step").hidden = options.length < 2;
   if (options.length < 2) {
     $("designs").innerHTML = "";
+    renderPreview();
     renderEffects();
     return;
   }
@@ -669,7 +686,6 @@ function renderDesigns() {
     `<button type="button" class="system" role="radio" data-id="${esc(d.id)}"
              aria-checked="${design === d.id}">
        <span class="system-title">${esc(d.title)}</span>
-       <span class="system-subtitle">${esc(d.subtitle)}</span>
      </button>`
   ).join("");
 
@@ -677,7 +693,33 @@ function renderDesigns() {
     el.onclick = () => selectDesign(el.dataset.id);
   }
 
+  renderPreview();
   renderEffects();
+}
+
+// The still for the selected board. The src is only ever written when it
+// changes: reassigning the same one restarts the decode and flickers the frame
+// on every re-render of the picker.
+function renderPreview() {
+  const options = (system && system.designs) || [];
+  const chosen = options.find((d) => d.id === design);
+  const src = (chosen && chosen.preview) || null;
+  const fig = $("design-preview");
+  const img = $("design-preview-img");
+
+  fig.hidden = !src;
+  if (!src) {
+    // Dropped rather than left standing, so a system without stills doesn't
+    // keep the last one it had loaded behind a hidden frame.
+    img.removeAttribute("src");
+    img.alt = "";
+    return;
+  }
+
+  if (!img.getAttribute("src") || img.getAttribute("src") !== src) {
+    img.setAttribute("src", src);
+  }
+  img.alt = `${chosen.title} display for ${system.subtitle}`;
 }
 
 function selectDesign(id) {
