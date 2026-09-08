@@ -419,13 +419,11 @@ const SYSTEMS = [
       {
         id: "classic",
         title: "Retro",
-        subtitle: "Two lines of amber rows, in the station's own type",
         preview: "previews/wmata-retro.png",
       },
       {
         id: "modern",
         title: "Modern",
-        subtitle: "The full-width board, line colours and all",
         preview: "previews/wmata-modern.png",
         // No arrivingEffect: WMATA's own signs say BRD in the column where the
         // wait goes, so the board already calls an arriving train out where a
@@ -449,7 +447,6 @@ const SYSTEMS = [
       {
         id: "modern",
         title: "Modern",
-        subtitle: "The full-width board, bullets and all",
         preview: "previews/mta-modern.png",
         // This board marks an arriving train, and is the only one that does —
         // the retro rows have no equivalent — so the choice of *how* hangs off
@@ -459,7 +456,6 @@ const SYSTEMS = [
       {
         id: "classic",
         title: "Retro",
-        subtitle: "Two lines of amber rows, in the station's own type",
         preview: "previews/mta-retro.png",
       },
     ],
@@ -690,7 +686,6 @@ function renderDesigns() {
     `<button type="button" class="system" role="radio" data-id="${esc(d.id)}"
              aria-checked="${design === d.id}">
        <span class="system-title">${esc(d.title)}</span>
-       <span class="system-subtitle">${esc(d.subtitle)}</span>
      </button>`
   ).join("");
 
