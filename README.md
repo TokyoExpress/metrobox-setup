@@ -41,11 +41,13 @@ to agree.
 
 A system with a `designs` array on its `SYSTEMS` entry grows a fourth step,
 after the station picker, letting the user choose which board the display
-draws. New York is the only one today: the direction board modelled on the
+draws. New York and Washington have one today: a modern board modelled on the
 newer platform screens, or the classic flip-board rows. Systems without the
 array — all the rest — don't render the step at all.
 
-The first entry is the system's default. Its `id` is POSTed as `design` and
+The first entry is the system's default, and it is per-system rather than a
+fixed order: New York leads with its modern board, Washington with the retro
+rows. Its `id` is POSTed as `design` and
 ends up in `device_design` on the firmware, where `resolveDesign()` in
 `metrobox_utils.cpp` owns the mapping; a design a device's build doesn't
 recognise falls back to the board it has rather than a blank panel. Systems
