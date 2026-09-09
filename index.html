@@ -331,6 +331,14 @@
       <div class="section-label" id="effects-label">Display effect for shortly arriving trains</div>
       <div class="effects" id="effects" role="radiogroup" aria-labelledby="effects-label"></div>
     </div>
+
+    <!-- BART's call-out. Its own section rather than another row of the one
+         above, because the two are never both on screen and a shared heading
+         would have to describe both at once. -->
+    <div class="section" id="takeover-section" hidden>
+      <div class="section-label" id="takeover-label">Arriving trains</div>
+      <div class="effects" id="takeover" role="radiogroup" aria-labelledby="takeover-label"></div>
+    </div>
   </div>
 
   <button id="save" disabled>Save Configuration</button>
@@ -467,6 +475,34 @@ const SYSTEMS = [
     searchHint: "Search stations…",
     chip: (line) => tileChip(BART_COLORS[line] || "#666", line),
     lineOrder: BART_ORDER,
+    // Retro first, so the Bay Area leads with the rows the way Washington
+    // does. Not a house style: BART's platforms are still mostly the red LED
+    // signs these imitate, and the default should be the sign a rider walking
+    // up to one actually sees.
+    //
+    // Both entries carry arrivingTakeover, which is the difference between
+    // this system and the other two. New York's effect hangs off one board
+    // because only that board marks an arriving train; BART's call-out is a
+    // behaviour of the *sign*, and both of its boards do it — the retro one in
+    // characters, the modern one in type and dashes. So the setting follows
+    // BART rather than following a board, and switching between the two here
+    // leaves it standing.
+    //
+    // No previews yet: there are no stills of either BART board to link, and
+    // renderPreview() drops the frame rather than showing a broken one. They
+    // slot in the day someone photographs a panel.
+    designs: [
+      {
+        id: "classic",
+        title: "Retro",
+        arrivingTakeover: true,
+      },
+      {
+        id: "modern",
+        title: "Modern",
+        arrivingTakeover: true,
+      },
+    ],
   },
 
   // ---- Not served yet. Titles are what a rider in that city calls the thing,
@@ -570,6 +606,18 @@ let design = null;
 // also goes back to the system's first board rather than to whatever the
 // device happens to be drawing.
 let arrivingEffect = "flash";
+// Whether an arriving train takes over BART's board. A separate control from
+// the effect above rather than two more entries on it, because it is not the
+// same question: New York's effect decorates one row and leaves the board
+// alone, where BART's call-out hands the arriving train the whole screen for a
+// moment. Folding them together would let a display re-pointed from New York to
+// the Bay Area read "flash" as an answer about the takeover.
+//
+// "full" to start, and this is the one control here whose default is not the
+// behaviour a device already has — no BART display drew anything for an
+// arriving train before this existed. It leads because it is what BART's own
+// platform signs do.
+let arrivingTakeover = "full";
 
 function dotChip(color, line) {
   return `<span class="chip" style="background:${color}" title="${esc(line)}"></span>`;
@@ -679,6 +727,7 @@ function renderDesigns() {
     $("designs").innerHTML = "";
     renderPreview();
     renderEffects();
+    renderTakeover();
     return;
   }
 
@@ -695,6 +744,7 @@ function renderDesigns() {
 
   renderPreview();
   renderEffects();
+  renderTakeover();
 }
 
 // The still for the selected board. The src is only ever written when it
@@ -795,6 +845,59 @@ function selectEffect(id) {
   // ago, which is no longer what this form says.
   clearMessage();
   renderEffects();
+}
+
+// The ids the server stores and the firmware parses, the same contract
+// ARRIVING_EFFECTS above holds. Two rather than three: the call-out is a thing
+// the board either does or does not do, and there is no half of it to keep the
+// way an outline is the still half of a flash.
+const ARRIVING_TAKEOVERS = [
+  {
+    id: "full",
+    title: "Take over the screen",
+  },
+  {
+    id: "none",
+    title: "No call-out",
+  },
+];
+
+// Whether the chosen board hands an arriving train the whole screen. Asked of
+// the design like effectApplies(), so the two controls are configured the same
+// way — but every BART board answers yes, which is what makes the control sit
+// still while a rider switches between them.
+function takeoverApplies() {
+  const options = (system && system.designs) || [];
+  const chosen = options.find((d) => d.id === design);
+  return Boolean(chosen && chosen.arrivingTakeover);
+}
+
+function renderTakeover() {
+  const applies = takeoverApplies();
+  $("takeover-section").hidden = !applies;
+  if (!applies) {
+    $("takeover").innerHTML = "";
+    return;
+  }
+
+  $("takeover").innerHTML = ARRIVING_TAKEOVERS.map((t) =>
+    `<button type="button" class="effect" role="radio" data-id="${esc(t.id)}"
+             aria-checked="${arrivingTakeover === t.id}">
+       <span class="mark" aria-hidden="true"></span>
+       <span class="system-title">${esc(t.title)}</span>
+     </button>`
+  ).join("");
+
+  for (const el of $("takeover").children) {
+    el.onclick = () => selectTakeover(el.dataset.id);
+  }
+}
+
+function selectTakeover(id) {
+  if (arrivingTakeover === id) return;
+  arrivingTakeover = id;
+  clearMessage();
+  renderTakeover();
 }
 
 // ----------------------------------------------------------------- stations
@@ -1013,6 +1116,10 @@ async function save() {
         // beside it: the server derives that for the firmware still asking for
         // it, and it cannot express "no effect" anyway.
         ...(effectApplies() ? { arrivingEffect } : {}),
+        // And the same rule for BART's call-out: left out entirely for a board
+        // that has none, so saving a New York display decides nothing about a
+        // Bay Area one that shares the account.
+        ...(takeoverApplies() ? { arrivingTakeover } : {}),
       }),
     });
 
