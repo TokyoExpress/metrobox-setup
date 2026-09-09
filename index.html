@@ -395,6 +395,25 @@ const BART_DARK_TEXT = new Set(["Y", "O"]);
 // to 24h from re-running), and harmless once it doesn't.
 const BART_ORDER = ["R", "O", "Y", "G", "B"];
 
+const MBTA_COLORS = {
+  RD: "#DA291C", OR: "#ED8B00", BL: "#003DA5",
+  GB: "#00843D", GC: "#00843D", GD: "#00843D", GE: "#00843D",
+  MT: "#DA291C",
+};
+// Orange is the one light fill here and takes black text; the rest are white.
+// The same call getLineTextColor() makes on the panel.
+const MBTA_DARK_TEXT = new Set(["OR"]);
+// Two-character codes, unlike BART's single letters, and forced rather than
+// chosen: the Blue Line and the Green Line's B branch would both be "B", and a
+// collision in a line code draws one line in another's colour.
+//
+// All four Green branches share the one green — the MBTA paints them
+// identically and a rider tells a C from a D by reading the letter, which is
+// what the badge is for. Same order as LINE_CODES in the mbta_station_info
+// poller, and repeated here for the reason BART_ORDER is: the deployed blob can
+// be up to a day behind a change.
+const MBTA_ORDER = ["RD", "OR", "BL", "GB", "GC", "GD", "GE", "MT"];
+
 // The systems this page knows how to present. Which of them a user can
 // actually pick is decided by discovery — an entry with no station-info URL
 // renders disabled rather than silently missing, because "New York isn't
@@ -504,6 +523,38 @@ const SYSTEMS = [
       },
     ],
   },
+  {
+    id: "mbta",
+    title: "MBTA Subway",
+    subtitle: "MBTA",
+    searchHint: "Search stations…",
+    chip: (line) => tileChip(MBTA_COLORS[line] || "#666", line),
+    lineOrder: MBTA_ORDER,
+    // Retro first, like Washington and the Bay Area. Boston's platforms are
+    // still mostly the amber LED signs the retro rows imitate, so that is the
+    // board a rider walking up to one actually sees.
+    //
+    // No arrivingTakeover: that is BART's, and it is a behaviour of BART's own
+    // platform signs rather than a thing every retro board does. No
+    // arrivingEffect either — the MBTA board says "Stopped" in the column where
+    // the countdown goes, so like WMATA it already calls an arriving train out
+    // where a rider is looking, and movement on top of that would be the
+    // display's idea rather than the agency's.
+    //
+    // No previews yet, the same as BART: there are no stills of either board to
+    // link, and renderPreview() drops the frame rather than showing a broken
+    // one.
+    designs: [
+      {
+        id: "classic",
+        title: "Retro",
+      },
+      {
+        id: "modern",
+        title: "Modern",
+      },
+    ],
+  },
 
   // ---- Not served yet. Titles are what a rider in that city calls the thing,
   // since that is what the picker is read as.
@@ -522,13 +573,6 @@ const SYSTEMS = [
     // A bus stop is served by however many routes happen to pass it, and the
     // route names are not a small fixed set the way a rail network's are.
     // Whatever these get, it will not be the rail bullet.
-    chip: null,
-  },
-  {
-    id: "mbta",
-    title: "Boston Subway",
-    subtitle: "MBTA",
-    searchHint: "Search stations…",
     chip: null,
   },
   {
