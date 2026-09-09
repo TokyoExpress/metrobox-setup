@@ -331,6 +331,22 @@
       <div class="section-label" id="effects-label">Display effect for shortly arriving trains</div>
       <div class="effects" id="effects" role="radiogroup" aria-labelledby="effects-label"></div>
     </div>
+
+    <!-- BART's call-out. Its own section rather than another row of the one
+         above, because the two are never both on screen and a shared heading
+         would have to describe both at once. -->
+    <div class="section" id="takeover-section" hidden>
+      <div class="section-label" id="takeover-label">Arriving trains</div>
+      <div class="effects" id="takeover" role="radiogroup" aria-labelledby="takeover-label"></div>
+    </div>
+
+    <!-- Shown for every modern board and no retro one, which is why it sits
+         beside the two above rather than inside either of them: those are one
+         agency's setting each, and this one is every agency's. -->
+    <div class="section" id="theme-section" hidden>
+      <div class="section-label" id="theme-label">Board colour</div>
+      <div class="effects" id="theme" role="radiogroup" aria-labelledby="theme-label"></div>
+    </div>
   </div>
 
   <button id="save" disabled>Save Configuration</button>
@@ -387,6 +403,25 @@ const BART_DARK_TEXT = new Set(["Y", "O"]);
 // to 24h from re-running), and harmless once it doesn't.
 const BART_ORDER = ["R", "O", "Y", "G", "B"];
 
+const MBTA_COLORS = {
+  RD: "#DA291C", OR: "#ED8B00", BL: "#003DA5",
+  GB: "#00843D", GC: "#00843D", GD: "#00843D", GE: "#00843D",
+  MT: "#DA291C",
+};
+// Orange is the one light fill here and takes black text; the rest are white.
+// The same call getLineTextColor() makes on the panel.
+const MBTA_DARK_TEXT = new Set(["OR"]);
+// Two-character codes, unlike BART's single letters, and forced rather than
+// chosen: the Blue Line and the Green Line's B branch would both be "B", and a
+// collision in a line code draws one line in another's colour.
+//
+// All four Green branches share the one green — the MBTA paints them
+// identically and a rider tells a C from a D by reading the letter, which is
+// what the badge is for. Same order as LINE_CODES in the mbta_station_info
+// poller, and repeated here for the reason BART_ORDER is: the deployed blob can
+// be up to a day behind a change.
+const MBTA_ORDER = ["RD", "OR", "BL", "GB", "GC", "GD", "GE", "MT"];
+
 // The systems this page knows how to present. Which of them a user can
 // actually pick is decided by discovery — an entry with no station-info URL
 // renders disabled rather than silently missing, because "New York isn't
@@ -428,6 +463,7 @@ const SYSTEMS = [
         // No arrivingEffect: WMATA's own signs say BRD in the column where the
         // wait goes, so the board already calls an arriving train out where a
         // rider is looking and there is no effect to choose between.
+        theme: true,
       },
     ],
   },
@@ -452,6 +488,7 @@ const SYSTEMS = [
         // the retro rows have no equivalent — so the choice of *how* hangs off
         // the design rather than off the system.
         arrivingEffect: true,
+        theme: true,
       },
       {
         id: "classic",
@@ -467,6 +504,68 @@ const SYSTEMS = [
     searchHint: "Search stations…",
     chip: (line) => tileChip(BART_COLORS[line] || "#666", line),
     lineOrder: BART_ORDER,
+    // Retro first, so the Bay Area leads with the rows the way Washington
+    // does. Not a house style: BART's platforms are still mostly the red LED
+    // signs these imitate, and the default should be the sign a rider walking
+    // up to one actually sees.
+    //
+    // Both entries carry arrivingTakeover, which is the difference between
+    // this system and the other two. New York's effect hangs off one board
+    // because only that board marks an arriving train; BART's call-out is a
+    // behaviour of the *sign*, and both of its boards do it — the retro one in
+    // characters, the modern one in type and dashes. So the setting follows
+    // BART rather than following a board, and switching between the two here
+    // leaves it standing.
+    //
+    // No previews yet: there are no stills of either BART board to link, and
+    // renderPreview() drops the frame rather than showing a broken one. They
+    // slot in the day someone photographs a panel.
+    designs: [
+      {
+        id: "classic",
+        title: "Retro",
+        arrivingTakeover: true,
+      },
+      {
+        id: "modern",
+        title: "Modern",
+        arrivingTakeover: true,
+        theme: true,
+      },
+    ],
+  },
+  {
+    id: "mbta",
+    title: "MBTA Subway",
+    subtitle: "MBTA",
+    searchHint: "Search stations…",
+    chip: (line) => tileChip(MBTA_COLORS[line] || "#666", line),
+    lineOrder: MBTA_ORDER,
+    // Retro first, like Washington and the Bay Area. Boston's platforms are
+    // still mostly the amber LED signs the retro rows imitate, so that is the
+    // board a rider walking up to one actually sees.
+    //
+    // No arrivingTakeover: that is BART's, and it is a behaviour of BART's own
+    // platform signs rather than a thing every retro board does. No
+    // arrivingEffect either — the MBTA board says "Stopped" in the column where
+    // the countdown goes, so like WMATA it already calls an arriving train out
+    // where a rider is looking, and movement on top of that would be the
+    // display's idea rather than the agency's.
+    //
+    // No previews yet, the same as BART: there are no stills of either board to
+    // link, and renderPreview() drops the frame rather than showing a broken
+    // one.
+    designs: [
+      {
+        id: "classic",
+        title: "Retro",
+      },
+      {
+        id: "modern",
+        title: "Modern",
+        theme: true,
+      },
+    ],
   },
 
   // ---- Not served yet. Titles are what a rider in that city calls the thing,
@@ -486,13 +585,6 @@ const SYSTEMS = [
     // A bus stop is served by however many routes happen to pass it, and the
     // route names are not a small fixed set the way a rail network's are.
     // Whatever these get, it will not be the rail bullet.
-    chip: null,
-  },
-  {
-    id: "mbta",
-    title: "Boston Subway",
-    subtitle: "MBTA",
-    searchHint: "Search stations…",
     chip: null,
   },
   {
@@ -570,6 +662,28 @@ let design = null;
 // also goes back to the system's first board rather than to whatever the
 // device happens to be drawing.
 let arrivingEffect = "flash";
+// Whether an arriving train takes over BART's board. A separate control from
+// the effect above rather than two more entries on it, because it is not the
+// same question: New York's effect decorates one row and leaves the board
+// alone, where BART's call-out hands the arriving train the whole screen for a
+// moment. Folding them together would let a display re-pointed from New York to
+// the Bay Area read "flash" as an answer about the takeover.
+//
+// "full" to start, and this is the one control here whose default is not the
+// behaviour a device already has — no BART display drew anything for an
+// arriving train before this existed. It leads because it is what BART's own
+// platform signs do.
+let arrivingTakeover = "full";
+// Which of its two palettes a modern board paints on. The one display setting
+// here that belongs to no single agency — every modern board reads it, and no
+// retro board does, because a retro board imitates a *lit sign* whose ground is
+// unlit pixels rather than a colour anyone chose.
+//
+// "dark" to start, and unlike the takeover this default really is the incumbent
+// behaviour: every modern board in this project was painted on a dark ground
+// before the setting existed, so a display never told otherwise keeps the
+// appearance it already has.
+let boardTheme = "dark";
 
 function dotChip(color, line) {
   return `<span class="chip" style="background:${color}" title="${esc(line)}"></span>`;
@@ -679,6 +793,8 @@ function renderDesigns() {
     $("designs").innerHTML = "";
     renderPreview();
     renderEffects();
+    renderTakeover();
+    renderTheme();
     return;
   }
 
@@ -695,6 +811,8 @@ function renderDesigns() {
 
   renderPreview();
   renderEffects();
+  renderTakeover();
+  renderTheme();
 }
 
 // The still for the selected board. The src is only ever written when it
@@ -795,6 +913,109 @@ function selectEffect(id) {
   // ago, which is no longer what this form says.
   clearMessage();
   renderEffects();
+}
+
+// The ids the server stores and the firmware parses, the same contract
+// ARRIVING_EFFECTS above holds. Two rather than three: the call-out is a thing
+// the board either does or does not do, and there is no half of it to keep the
+// way an outline is the still half of a flash.
+const ARRIVING_TAKEOVERS = [
+  {
+    id: "full",
+    title: "Take over the screen",
+  },
+  {
+    id: "none",
+    title: "No call-out",
+  },
+];
+
+// Whether the chosen board hands an arriving train the whole screen. Asked of
+// the design like effectApplies(), so the two controls are configured the same
+// way — but every BART board answers yes, which is what makes the control sit
+// still while a rider switches between them.
+function takeoverApplies() {
+  const options = (system && system.designs) || [];
+  const chosen = options.find((d) => d.id === design);
+  return Boolean(chosen && chosen.arrivingTakeover);
+}
+
+function renderTakeover() {
+  const applies = takeoverApplies();
+  $("takeover-section").hidden = !applies;
+  if (!applies) {
+    $("takeover").innerHTML = "";
+    return;
+  }
+
+  $("takeover").innerHTML = ARRIVING_TAKEOVERS.map((t) =>
+    `<button type="button" class="effect" role="radio" data-id="${esc(t.id)}"
+             aria-checked="${arrivingTakeover === t.id}">
+       <span class="mark" aria-hidden="true"></span>
+       <span class="system-title">${esc(t.title)}</span>
+     </button>`
+  ).join("");
+
+  for (const el of $("takeover").children) {
+    el.onclick = () => selectTakeover(el.dataset.id);
+  }
+}
+
+function selectTakeover(id) {
+  if (arrivingTakeover === id) return;
+  arrivingTakeover = id;
+  clearMessage();
+  renderTakeover();
+}
+
+// The ids the server stores and the firmware parses, the same contract the two
+// lists above hold.
+const BOARD_THEMES = [
+  {
+    id: "dark",
+    title: "Dark",
+  },
+  {
+    id: "light",
+    title: "Light",
+  },
+];
+
+// Whether the chosen board has a theme to pick. Asked of the design rather than
+// of the system, because that is exactly the distinction: every modern board
+// answers yes and every retro board answers no, in all four cities.
+function themeApplies() {
+  const options = (system && system.designs) || [];
+  const chosen = options.find((d) => d.id === design);
+  return Boolean(chosen && chosen.theme);
+}
+
+function renderTheme() {
+  const applies = themeApplies();
+  $("theme-section").hidden = !applies;
+  if (!applies) {
+    $("theme").innerHTML = "";
+    return;
+  }
+
+  $("theme").innerHTML = BOARD_THEMES.map((t) =>
+    `<button type="button" class="effect" role="radio" data-id="${esc(t.id)}"
+             aria-checked="${boardTheme === t.id}">
+       <span class="mark" aria-hidden="true"></span>
+       <span class="system-title">${esc(t.title)}</span>
+     </button>`
+  ).join("");
+
+  for (const el of $("theme").children) {
+    el.onclick = () => selectTheme(el.dataset.id);
+  }
+}
+
+function selectTheme(id) {
+  if (boardTheme === id) return;
+  boardTheme = id;
+  clearMessage();
+  renderTheme();
 }
 
 // ----------------------------------------------------------------- stations
@@ -1013,6 +1234,13 @@ async function save() {
         // beside it: the server derives that for the firmware still asking for
         // it, and it cannot express "no effect" anyway.
         ...(effectApplies() ? { arrivingEffect } : {}),
+        // And the same rule for BART's call-out: left out entirely for a board
+        // that has none, so saving a New York display decides nothing about a
+        // Bay Area one that shares the account.
+        ...(takeoverApplies() ? { arrivingTakeover } : {}),
+        // Left out for a retro board, so saving one decides nothing about the
+        // theme of the modern board on the same display.
+        ...(themeApplies() ? { boardTheme } : {}),
       }),
     });
 
