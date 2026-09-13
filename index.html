@@ -347,6 +347,12 @@
       <div class="section-label" id="theme-label">Arrivals color scheme</div>
       <div class="effects" id="theme" role="radiogroup" aria-labelledby="theme-label"></div>
     </div>
+
+    <!-- WMATA's modern board only: its column-header strip. -->
+    <div class="section" id="wmata-header-section" hidden>
+      <div class="section-label" id="wmata-header-label">Column header</div>
+      <div class="effects" id="wmata-header" role="radiogroup" aria-labelledby="wmata-header-label"></div>
+    </div>
   </div>
 
   <button id="save" disabled>Save Configuration</button>
@@ -464,6 +470,8 @@ const SYSTEMS = [
         // wait goes, so the board already calls an arriving train out where a
         // rider is looking and there is no effect to choose between.
         theme: true,
+        // The grey "LN CAR DESTINATION MIN" strip can be switched off.
+        wmataHeader: true,
       },
     ],
   },
@@ -684,6 +692,9 @@ let arrivingTakeover = "full";
 // before the setting existed, so a display never told otherwise keeps the
 // appearance it already has.
 let boardTheme = "dark";
+// Whether WMATA's modern board draws its column-header strip. "show" to start,
+// which is what every such board drew before this was a setting.
+let wmataHeader = "show";
 
 function dotChip(color, line) {
   return `<span class="chip" style="background:${color}" title="${esc(line)}"></span>`;
@@ -795,6 +806,7 @@ function renderDesigns() {
     renderEffects();
     renderTakeover();
     renderTheme();
+    renderWmataHeader();
     return;
   }
 
@@ -813,6 +825,7 @@ function renderDesigns() {
   renderEffects();
   renderTakeover();
   renderTheme();
+  renderWmataHeader();
 }
 
 // The still for the selected board. The src is only ever written when it
@@ -1016,6 +1029,45 @@ function selectTheme(id) {
   boardTheme = id;
   clearMessage();
   renderTheme();
+}
+
+const WMATA_HEADERS = [
+  { id: "show", title: "Show" },
+  { id: "hide", title: "Hide" },
+];
+
+function wmataHeaderApplies() {
+  const options = (system && system.designs) || [];
+  const chosen = options.find((d) => d.id === design);
+  return Boolean(chosen && chosen.wmataHeader);
+}
+
+function renderWmataHeader() {
+  const applies = wmataHeaderApplies();
+  $("wmata-header-section").hidden = !applies;
+  if (!applies) {
+    $("wmata-header").innerHTML = "";
+    return;
+  }
+
+  $("wmata-header").innerHTML = WMATA_HEADERS.map((h) =>
+    `<button type="button" class="effect" role="radio" data-id="${esc(h.id)}"
+             aria-checked="${wmataHeader === h.id}">
+       <span class="mark" aria-hidden="true"></span>
+       <span class="system-title">${esc(h.title)}</span>
+     </button>`
+  ).join("");
+
+  for (const el of $("wmata-header").children) {
+    el.onclick = () => selectWmataHeader(el.dataset.id);
+  }
+}
+
+function selectWmataHeader(id) {
+  if (wmataHeader === id) return;
+  wmataHeader = id;
+  clearMessage();
+  renderWmataHeader();
 }
 
 // ----------------------------------------------------------------- stations
@@ -1241,6 +1293,8 @@ async function save() {
         // Left out for a retro board, so saving one decides nothing about the
         // theme of the modern board on the same display.
         ...(themeApplies() ? { boardTheme } : {}),
+        // WMATA's modern board only, so no other save touches it.
+        ...(wmataHeaderApplies() ? { wmataHeader } : {}),
       }),
     });
 
