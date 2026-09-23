@@ -122,9 +122,11 @@
 
   .chips { display: flex; gap: 4px; flex: none; align-items: center; }
   /* One shape per system. WMATA lines are identified by colour alone, so a
-     plain dot carries all of it. MTA and BART both need the letter — 1/2/3 are
-     one red and 4/5/6 one green, and BART's codes *are* the colours — which is
-     the same split displayStationLines() makes in the firmware. */
+     plain dot carries all of it. The rest need the letter — 1/2/3 are one red
+     and 4/5/6 one green, and BART's codes *are* the colours — and it sits in
+     the shape the agency puts it in: a circle for New York's bullets and for
+     Metro's line icons, a rounded square for BART, Boston and Chicago. The
+     same split displayStationLines() makes in the firmware. */
   .chip { width: 10px; height: 10px; border-radius: 50%; flex: none; }
   .chip.bullet, .chip.tile {
     width: 19px; height: 19px;
@@ -136,7 +138,8 @@
      is 2 for BART in every DisplayProfile). */
   .chip.tile { border-radius: 2px; }
   /* Black on the light fills — the MTA's N/Q/R/W yellow, BART's yellow and
-     orange; white on everything else. Same rule as getLineTextColor(). */
+     orange, Metro's E Line amber; white on everything else. Same rule as
+     getLineTextColor(). */
   .chip.on-light { color: #000; }
 
   button {
@@ -442,14 +445,14 @@ const LAMETRO_COLORS = {
 };
 // Single letters, like BART's and unlike Boston's two-character codes: in Los
 // Angeles the letter *is* the line's name, the thing painted on the station
-// pylon, so there is nothing to abbreviate and nothing that collides.
+// pylon, so there is nothing to abbreviate and nothing that collides. It is
+// drawn in a circle rather than a rounded square, because Metro's line icon is
+// a filled circle with the letter in it — New York's shape, not BART's.
 //
-// The E Line's amber is the one light fill here and takes black text — the
-// same call getLineTextColor() makes on the panel, except that the panel does
-// not yet make it. LAMETRO_E is its own constant rather than YELLOW or
-// BART_YELLOW, so it falls through to white there: the unreadable chip BART's
-// comment above describes having fixed, in the one colour that has it again.
-// The page is right and the firmware needs the matching line.
+// The E Line's amber is the one light fill here and takes black text, the same
+// call getLineTextColor() makes on the panel. LAMETRO_E is its own constant
+// rather than YELLOW or BART_YELLOW, so the panel needed it listed by hand,
+// the third palette in a row to need that.
 const LAMETRO_DARK_TEXT = new Set(["E"]);
 // A through E and then K — the order Metro itself lists them in, which is the
 // order LINE_CODES carries in the lametro_station_info poller, where it is
@@ -511,7 +514,7 @@ const SYSTEMS = [
     // Several New York stations share a name — there are four "86 St" — so the
     // bullets are how you tell them apart, and searching one is fair game.
     searchHint: "Search by station or line…",
-    chip: (line) => bulletChip(MTA_COLORS[line] || "#666", line),
+    chip: (line) => bulletChip(MTA_COLORS[line] || "#666", line, MTA_DARK_TEXT),
     searchLines: true,
     // The first entry is the system's default and is what a device that has
     // never been given a design already draws, so leaving this step alone
@@ -609,7 +612,7 @@ const SYSTEMS = [
     title: "Los Angeles Metro Rail",
     subtitle: "LACMTA",
     searchHint: "Search stations…",
-    chip: (line) => tileChip(LAMETRO_COLORS[line] || "#666", line, LAMETRO_DARK_TEXT),
+    chip: (line) => bulletChip(LAMETRO_COLORS[line] || "#666", line, LAMETRO_DARK_TEXT),
     lineOrder: LAMETRO_ORDER,
     // Boston's two boards, because Los Angeles draws Boston's: usingBadgeBoard()
     // in the firmware is a check on the pair, and the retro rows are the same
@@ -754,8 +757,11 @@ function dotChip(color, line) {
   return `<span class="chip" style="background:${color}" title="${esc(line)}"></span>`;
 }
 
-function bulletChip(color, line) {
-  const dark = MTA_DARK_TEXT.has(line) ? " on-light" : "";
+// New York and Los Angeles both draw this one, and each has its own light
+// fills, so the set of codes that take black text is an argument — the same
+// fix tileChip() needed when it gained a second caller.
+function bulletChip(color, line, darkText) {
+  const dark = darkText.has(line) ? " on-light" : "";
   return `<span class="chip bullet${dark}" style="background:${color}" title="${esc(line)}">${esc(line)}</span>`;
 }
 
