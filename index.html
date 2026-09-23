@@ -122,9 +122,11 @@
 
   .chips { display: flex; gap: 4px; flex: none; align-items: center; }
   /* One shape per system. WMATA lines are identified by colour alone, so a
-     plain dot carries all of it. MTA and BART both need the letter — 1/2/3 are
-     one red and 4/5/6 one green, and BART's codes *are* the colours — which is
-     the same split displayStationLines() makes in the firmware. */
+     plain dot carries all of it. The rest need the letter — 1/2/3 are one red
+     and 4/5/6 one green, and BART's codes *are* the colours — and it sits in
+     the shape the agency puts it in: a circle for New York's bullets and for
+     Metro's line icons, a rounded square for BART, Boston and Chicago. The
+     same split displayStationLines() makes in the firmware. */
   .chip { width: 10px; height: 10px; border-radius: 50%; flex: none; }
   .chip.bullet, .chip.tile {
     width: 19px; height: 19px;
@@ -136,7 +138,8 @@
      is 2 for BART in every DisplayProfile). */
   .chip.tile { border-radius: 2px; }
   /* Black on the light fills — the MTA's N/Q/R/W yellow, BART's yellow and
-     orange; white on everything else. Same rule as getLineTextColor(). */
+     orange, Metro's E Line amber; white on everything else. Same rule as
+     getLineTextColor(). */
   .chip.on-light { color: #000; }
 
   button {
@@ -437,6 +440,31 @@ const MBTA_DARK_TEXT = new Set(["OR"]);
 // be up to a day behind a change.
 const MBTA_ORDER = ["RD", "OR", "BL", "GB", "GC", "GD", "GE", "MT"];
 
+// Metro's own line colours, taken from LINES in the lametro_trains poller,
+// which holds them at full width — the firmware's LAMETRO_* constants are the
+// same colours already reduced to RGB565, so reading them back would be
+// copying a rounding error.
+const LAMETRO_COLORS = {
+  A: "#0072BC", B: "#EB131B", C: "#58A738",
+  D: "#A05DA5", E: "#FDB913", K: "#E56DB1",
+};
+// Single letters, like BART's and unlike Boston's two-character codes: in Los
+// Angeles the letter *is* the line's name, the thing painted on the station
+// pylon, so there is nothing to abbreviate and nothing that collides. It is
+// drawn in a circle rather than a rounded square, because Metro's line icon is
+// a filled circle with the letter in it — New York's shape, not BART's.
+//
+// The E Line's amber is the one light fill here and takes black text, the same
+// call getLineTextColor() makes on the panel. LAMETRO_E is its own constant
+// rather than YELLOW or BART_YELLOW, so the panel needed it listed by hand,
+// the third palette in a row to need that.
+const LAMETRO_DARK_TEXT = new Set(["E"]);
+// A through E and then K — the order Metro itself lists them in, which is the
+// order LINE_CODES carries in the lametro_station_info poller, where it is
+// really decided. Repeated here for the reason BART_ORDER and MBTA_ORDER are:
+// the deployed blob can be up to a day behind a change to it.
+const LAMETRO_ORDER = ["A", "B", "C", "D", "E", "K"];
+
 // The systems this page knows how to present. Which of them a user can
 // actually pick is decided by discovery — an entry with no station-info URL
 // renders disabled rather than silently missing, because "New York isn't
@@ -491,7 +519,7 @@ const SYSTEMS = [
     // Several New York stations share a name — there are four "86 St" — so the
     // bullets are how you tell them apart, and searching one is fair game.
     searchHint: "Search by station or line…",
-    chip: (line) => bulletChip(MTA_COLORS[line] || "#666", line),
+    chip: (line) => bulletChip(MTA_COLORS[line] || "#666", line, MTA_DARK_TEXT),
     searchLines: true,
     // The first entry is the system's default and is what a device that has
     // never been given a design already draws, so leaving this step alone
@@ -519,7 +547,7 @@ const SYSTEMS = [
     title: "Bay Area Rapid Transit",
     subtitle: "BART",
     searchHint: "Search stations…",
-    chip: (line) => tileChip(BART_COLORS[line] || "#666", line),
+    chip: (line) => tileChip(BART_COLORS[line] || "#666", line, BART_DARK_TEXT),
     lineOrder: BART_ORDER,
     // Retro first, so the Bay Area leads with the rows the way Washington
     // does. Not a house style: BART's platforms are still mostly the red LED
@@ -556,7 +584,7 @@ const SYSTEMS = [
     title: "Boston Subway",
     subtitle: "MBTA",
     searchHint: "Search stations…",
-    chip: (line) => tileChip(MBTA_COLORS[line] || "#666", line),
+    chip: (line) => tileChip(MBTA_COLORS[line] || "#666", line, MBTA_DARK_TEXT),
     lineOrder: MBTA_ORDER,
     // Retro first, like Washington and the Bay Area. Boston's platforms are
     // still mostly the amber LED signs the retro rows imitate, so that is the
@@ -572,6 +600,38 @@ const SYSTEMS = [
     // No previews yet, the same as BART: there are no stills of either board to
     // link, and renderPreview() drops the frame rather than showing a broken
     // one.
+    designs: [
+      {
+        id: "classic",
+        title: "Retro",
+      },
+      {
+        id: "modern",
+        title: "Modern",
+        theme: true,
+      },
+    ],
+  },
+  {
+    id: "lametro",
+    title: "Los Angeles Metro Rail",
+    subtitle: "LACMTA",
+    searchHint: "Search stations…",
+    chip: (line) => bulletChip(LAMETRO_COLORS[line] || "#666", line, LAMETRO_DARK_TEXT),
+    lineOrder: LAMETRO_ORDER,
+    // Boston's two boards, because Los Angeles draws Boston's: usingBadgeBoard()
+    // in the firmware is a check on the pair, and the retro rows are the same
+    // geometry in white rather than amber — Metro's platform signs are
+    // dot-matrix white, not the amber Boston's are.
+    //
+    // No arrivingTakeover: that is BART's own sign behaviour rather than a
+    // thing every retro board does. No arrivingEffect either — an arriving
+    // train reads " 0min" in the countdown column, so the board already calls
+    // it out where a rider is looking.
+    //
+    // No previews yet, the same as BART and Boston: there are no stills of
+    // either board to link, and renderPreview() drops the frame rather than
+    // showing a broken one.
     designs: [
       {
         id: "classic",
@@ -608,13 +668,6 @@ const SYSTEMS = [
     id: "cta",
     title: "Chicago L",
     subtitle: "CTA",
-    searchHint: "Search stations…",
-    chip: null,
-  },
-  {
-    id: "lacmta",
-    title: "Los Angeles Metro Rail",
-    subtitle: "LACMTA",
     searchHint: "Search stations…",
     chip: null,
   },
@@ -709,13 +762,21 @@ function dotChip(color, line) {
   return `<span class="chip" style="background:${color}" title="${esc(line)}"></span>`;
 }
 
-function bulletChip(color, line) {
-  const dark = MTA_DARK_TEXT.has(line) ? " on-light" : "";
+// New York and Los Angeles both draw this one, and each has its own light
+// fills, so the set of codes that take black text is an argument — the same
+// fix tileChip() needed when it gained a second caller.
+function bulletChip(color, line, darkText) {
+  const dark = darkText.has(line) ? " on-light" : "";
   return `<span class="chip bullet${dark}" style="background:${color}" title="${esc(line)}">${esc(line)}</span>`;
 }
 
-function tileChip(color, line) {
-  const dark = BART_DARK_TEXT.has(line) ? " on-light" : "";
+// Three systems draw this chip and each has its own light fills, so the set of
+// codes that take black text is an argument. It used to close over
+// BART_DARK_TEXT, which was right when BART was the only caller and silently
+// wrong afterwards: MBTA_DARK_TEXT was declared and never read, so Boston's
+// orange had been drawing white-on-#ED8B00 since the day it landed.
+function tileChip(color, line, darkText) {
+  const dark = darkText.has(line) ? " on-light" : "";
   return `<span class="chip tile${dark}" style="background:${color}" title="${esc(line)}">${esc(line)}</span>`;
 }
 
