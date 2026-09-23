@@ -78,7 +78,7 @@
   }
   .code-field input {
     width: 100%;
-    background: var(--panel);
+    background: var(--bg);
     border-color: var(--line);
     color: transparent;
     caret-color: var(--train);
@@ -105,7 +105,7 @@
 
   #list {
     margin-top: 10px; max-height: 340px; overflow-y: auto;
-    border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+    border: 0px solid var(--line); border-radius: 8px; background: var(--panel);
   }
   .station {
     display: flex; align-items: center; gap: 10px;
@@ -182,17 +182,19 @@
                                 #000 calc(100% - var(--fade)), transparent 100%);
   }
   .system {
-    width: auto; margin: 0; padding: 13px 14px;
+    width: auto; margin: 0; padding: 12px 13px;
     text-align: left;
     background: var(--panel); color: var(--text);
-    border: 1px solid var(--line); border-radius: 8px;
+    border: 2px solid var(--panel); border-radius: 8px;
     font: inherit; cursor: pointer;
     /* Title and subtitle sit side by side on the row, and drop to two lines
        only when the row is too narrow to hold both. */
     display: flex; flex-wrap: wrap; align-items: baseline;
     gap: 4px 10px;
   }
-  .system:hover:not(:disabled) { background: var(--panel-hi); }
+  .system:hover:not(:disabled) {
+    background: var(--panel-hi);
+  }
   /* Border only, the same 1px on all four sides. An inset left bar used to sit
      inside the border too, which stacked into a 4px left edge against 1px
      everywhere else and read as a lopsided box. */
@@ -206,6 +208,9 @@
   }
   .system-title { font-weight: 600; font-size: 15px; }
   .system-subtitle { font-size: 13px; color: var(--muted); }
+  [aria-checked="true"] .system-subtitle {
+    color: var(--train);
+  }
 
   /* The design picker reuses .system's card, so the two pickers read as the
      same control. It has no scroll cap of its own: a system offers two or
@@ -288,24 +293,24 @@
   <p class="sub">Choose your system, station, and other arrival display settings.</p>
 
   <div class="step">
-    <div class="step-label" id="code-label"><span class="step-num">1</span> Metrobox Code</div>
+    <div class="step-label" id="code-label">Enter Metrobox Code</div>
     <div class="code-field">
       <input id="code" autocomplete="off" spellcheck="false" inputmode="numeric"
              aria-labelledby="code-label" aria-describedby="code-hint">
       <div class="code-ghost" aria-hidden="true"><span class="g-pre">MB-</span><span id="g-typed"></span><span class="g-rest" id="g-rest">XXXXXX</span></div>
     </div>
-    <div class="hint" id="code-hint">Shown on screen when booting up the device.</div>
+    <div class="hint" id="code-hint">This is displayed on the screen when booting up the device.</div>
   </div>
 
   <div class="step">
-    <div class="step-label"><span class="step-num">2</span> <span id="system-label">Select transit system</span></div>
+    <div class="step-label"><span id="system-label">Select transit system</span></div>
     <div class="systems" id="systems" role="radiogroup" aria-labelledby="system-label"></div>
   </div>
 
   <!-- Hidden until a system is chosen: there is nothing to say in it before
        then, and an empty box explaining why it is empty is just clutter. -->
   <div class="step" id="station-step" hidden>
-    <div class="step-label" id="station-label"><span class="step-num">3</span> Select station</div>
+    <div class="step-label" id="station-label">Select station</div>
     <input id="search" placeholder="Search stations…" autocomplete="off"
            aria-labelledby="station-label" disabled>
     <div id="list"><div class="station note"><span class="station-name">Loading stations…</span></div></div>
@@ -315,7 +320,7 @@
        New York today. A step offering a single choice is not a choice, and
        drawing it would put a dead control between the station list and Save. -->
   <div class="step" id="design-step" hidden>
-    <div class="step-label"><span class="step-num">4</span> Display Settings</div>
+    <div class="step-label">Configure Display Settings</div>
 
     <div class="section">
       <div class="section-label" id="design-label">Display style</div>
