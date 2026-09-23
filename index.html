@@ -300,6 +300,72 @@
   .effect[aria-checked="true"] .mark { border-color: var(--train); }
   .effect[aria-checked="true"] .mark::after { transform: scale(1); }
 
+  /* ---- advanced settings: a disclosure, so the triangle is the whole
+     affordance. The native marker is replaced because Safari and Chrome draw
+     different ones, and neither matches the step labels' type. */
+  .advanced summary {
+    cursor: pointer; list-style: none; user-select: none;
+    margin-bottom: 0;
+  }
+  .advanced summary::-webkit-details-marker { display: none; }
+  .advanced summary::before {
+    content: ""; flex: none; align-self: center;
+    width: 0; height: 0;
+    border-left: 6px solid currentColor;
+    border-top: 4.5px solid transparent;
+    border-bottom: 4.5px solid transparent;
+    transition: transform 0.15s;
+  }
+  .advanced[open] summary::before { transform: rotate(90deg); }
+  .advanced summary:hover { color: var(--text); }
+  .advanced summary:focus-visible { outline: 2px solid var(--train); outline-offset: 4px; border-radius: 4px; }
+  .advanced[open] summary { margin-bottom: 14px; }
+
+  .stepper { display: flex; align-items: center; gap: 10px; }
+  .stepper button {
+    width: 36px; height: 36px; padding: 0; margin: 0;
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px;
+    font-weight: 600; font-size: 18px; line-height: 1; font-family: inherit;
+  }
+  .stepper button:hover:not(:disabled) { background: var(--panel-hi); }
+  .stepper button:disabled { color: var(--line); background: var(--panel); }
+  .stepper output { min-width: 92px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* One row per line: a checkbox, the line's own chip, and — while the line is
+     on — a pill per direction, named by where its trains are going. */
+  .line-row {
+    padding: 10px 0; border-bottom: 1px solid var(--line);
+  }
+  .line-row:last-child { border-bottom: 0; }
+  .line-toggle {
+    width: auto; margin: 0; padding: 0;
+    display: flex; align-items: center; gap: 10px;
+    background: none; border: 0; color: var(--text);
+    font-weight: 500; font-size: 15px; line-height: 1.4; font-family: inherit; cursor: pointer; text-align: left;
+  }
+  .line-toggle:focus-visible { outline: 2px solid var(--train); outline-offset: 2px; border-radius: 4px; }
+  .line-toggle .mark { border-radius: 4px; margin-top: 0; align-self: center; }
+  .line-toggle .mark::after { border-radius: 2px; }
+  .line-toggle[aria-checked="true"] .mark { border-color: var(--train); }
+  .line-toggle[aria-checked="true"] .mark::after { transform: scale(1); }
+  .line-toggle[aria-checked="false"] .line-name { color: var(--muted); }
+  .dirs { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0 27px; }
+  .dir {
+    width: auto; margin: 0; padding: 6px 12px;
+    background: var(--panel); color: var(--muted);
+    border: 1px solid var(--line); border-radius: 999px;
+    font-weight: 500; font-size: 13px; line-height: 1.3; font-family: inherit; text-align: left;
+  }
+  .dir:hover { background: var(--panel-hi); }
+  .dir[aria-pressed="true"] { color: var(--text); border-color: var(--train); background: var(--panel-hi); }
+  .dir .dir-sub { color: var(--muted); font-weight: 400; }
+  .dir:focus-visible { outline: 2px solid var(--train); outline-offset: 2px; }
+  .link {
+    width: auto; margin: 0; padding: 0; background: none; border: 0;
+    color: var(--train); font-weight: 500; font-size: 13px; line-height: 1.5; font-family: inherit; cursor: pointer;
+  }
+
   .msg { margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-size: 14px; display: none; }
   .msg.show { display: block; }
   .msg.ok  { background: rgba(53,196,107,0.12); color: var(--ok); }
@@ -384,6 +450,30 @@
       <div class="effects" id="wmata-header" role="radiogroup" aria-labelledby="wmata-header-label"></div>
     </div>
   </div>
+
+  <!-- Advanced settings: closed by default, because every default in it is
+       what a display already does, and most people never need to open it.
+       Shown once a system is chosen; the line list inside waits for a station,
+       since which lines there are is a fact about the station. -->
+  <details class="step advanced" id="advanced" hidden>
+    <summary class="step-label">Advanced settings</summary>
+
+    <div class="section">
+      <div class="section-label" id="switch-label">Switch directions every</div>
+      <div class="stepper" role="group" aria-labelledby="switch-label">
+        <button type="button" id="switch-down" aria-label="Fewer seconds">−</button>
+        <output id="switch-value" aria-live="polite">5 seconds</output>
+        <button type="button" id="switch-up" aria-label="More seconds">+</button>
+      </div>
+      <div class="hint" id="switch-hint">How long the display shows one direction before switching to the other.</div>
+    </div>
+
+    <div class="section">
+      <div class="section-label" id="lines-label">Lines and directions</div>
+      <div id="lines" role="group" aria-labelledby="lines-label"></div>
+      <div class="hint" id="lines-hint"></div>
+    </div>
+  </details>
 
   <button id="save" disabled>Save Configuration</button>
   <div id="msg" class="msg"></div>
@@ -732,6 +822,7 @@ const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "bas
 
 let system = null;              // entry from SYSTEMS
 let stationUrls = {};           // system id -> station-info URL from discovery
+let detailedUrls = {};          // system id -> detailed-arrivals URL, for direction names
 let stationCache = {};          // system id -> [{code, name, lines}]
 let stations = [];              // the list currently on screen
 let selected = null;
@@ -883,6 +974,7 @@ async function selectSystem(id) {
   $("station-step").hidden = false;
   renderSystems();
   renderDesigns();
+  renderAdvanced();
   refreshButton();
 
   await loadStations();
@@ -1166,6 +1258,219 @@ function selectWmataHeader(id) {
   renderWmataHeader();
 }
 
+// ---------------------------------------------------------- advanced settings
+
+// Seconds a display holds one direction before switching. The range is the
+// server's (set_device_config refuses anything outside it) and 5 is what every
+// display did before this was a setting.
+const SWITCH_MIN = 3;
+const SWITCH_MAX = 60;
+const SWITCH_DEFAULT = 5;
+let switchSeconds = SWITCH_DEFAULT;
+
+// The station's lines, and for each the directions ("1", "2") it is shown in.
+// A line with no directions is off. Every line in both directions is the
+// default, and is sent as an empty filter — which also keeps showing a line the
+// station list did not know about, where a filter naming every known line
+// would hide it.
+let stationLines = [];          // [{code, dirs: {"1": label, "2": label}}]
+let lineDirs = {};              // code -> Set of "1" / "2"
+let linesFor = null;            // the station code stationLines describes
+
+function stepSwitch(delta) {
+  // 1 s steps up to 10, then 5 s: 7 vs 8 is a real difference, 37 vs 38 is not.
+  let next;
+  if (delta > 0) next = switchSeconds < 10 ? switchSeconds + 1 : switchSeconds + 5 - (switchSeconds % 5);
+  else next = switchSeconds <= 10 ? switchSeconds - 1 : switchSeconds - (switchSeconds % 5 || 5);
+  switchSeconds = Math.min(SWITCH_MAX, Math.max(SWITCH_MIN, next));
+  clearMessage();
+  renderSwitch();
+}
+
+function renderSwitch() {
+  $("switch-value").textContent = `${switchSeconds} seconds`;
+  $("switch-down").disabled = switchSeconds <= SWITCH_MIN;
+  $("switch-up").disabled = switchSeconds >= SWITCH_MAX;
+  const oneWay = stationLines.length > 0 && !["1", "2"].every(
+    (g) => Object.values(lineDirs).some((set) => set.has(g)));
+  $("switch-hint").textContent = oneWay
+    ? "Only one direction is selected below, so the display will not switch."
+    : "How long the display shows one direction before switching to the other.";
+}
+
+// Which way each line's trains are headed in each direction, read from what is
+// running right now. The station list knows which lines stop somewhere but not
+// where they go, and a direction named "1" means nothing to anyone.
+async function loadStationLines(station) {
+  const sys = system;
+  linesFor = station.code;
+  stationLines = [];
+  lineDirs = {};
+  const known = new Map((station.lines || []).map((c) => [c, { "1": new Set(), "2": new Set() }]));
+  const groupLabels = { "1": "", "2": "" };
+  renderLines("Loading lines…");
+
+  const url = detailedUrls[sys.id];
+  if (url) {
+    try {
+      const data = await fetch(`${url}${encodeURIComponent(station.code)}`).then((r) => r.json());
+      for (const g of ["1", "2"]) {
+        const group = (data.groups || {})[g] || {};
+        groupLabels[g] = group.label || "";
+        for (const a of group.arrivals || []) {
+          // The key the readers filter on: `line` where the agency has one,
+          // `route` for New York. Same rule as line_of() on the server.
+          const code = a.line || a.route;
+          if (!code) continue;
+          if (!known.has(code)) known.set(code, { "1": new Set(), "2": new Set() });
+          const dest = a.destinationShort || a.destination || a.destinationFull;
+          if (dest) known.get(code)[g].add(dest);
+        }
+      }
+    } catch (err) {
+      // Not fatal: the lines still come from the station list, and the
+      // directions fall back to their generic names below.
+    }
+  }
+  // Another station or system was picked while this was in flight.
+  if (system !== sys || !selected || selected.code !== station.code) return;
+
+  stationLines = orderedLines([...known.keys()]).map((code) => {
+    const dirs = {};
+    for (const g of ["1", "2"]) {
+      const dests = [...known.get(code)[g]];
+      dirs[g] = {
+        title: dests.length ? dests.slice(0, 2).join(" / ") : (groupLabels[g] || `Direction ${g}`),
+        sub: dests.length ? groupLabels[g] : "no trains right now",
+      };
+    }
+    return { code, dirs };
+  });
+  resetLineDirs();
+  renderLines();
+}
+
+function orderedLines(codes) {
+  if (!system.lineOrder) return codes;
+  const rank = (c) => {
+    const i = system.lineOrder.indexOf(c);
+    return i === -1 ? system.lineOrder.length : i;
+  };
+  return codes.slice().sort((a, b) => rank(a) - rank(b));
+}
+
+function resetLineDirs() {
+  lineDirs = {};
+  for (const l of stationLines) lineDirs[l.code] = new Set(["1", "2"]);
+}
+
+function toggleLine(code) {
+  const set = lineDirs[code];
+  lineDirs[code] = set.size ? new Set() : new Set(["1", "2"]);
+  clearMessage();
+  renderLines();
+  refreshButton();
+}
+
+function toggleDir(code, g) {
+  const set = lineDirs[code];
+  if (set.has(g)) set.delete(g); else set.add(g);
+  clearMessage();
+  renderLines();
+  refreshButton();
+}
+
+function linesChosen() {
+  return stationLines.length === 0 || Object.values(lineDirs).some((s) => s.size);
+}
+
+function isDefaultFilter() {
+  return Object.values(lineDirs).every((s) => s.size === 2);
+}
+
+// What the POST carries: {} for every line both ways, otherwise only the lines
+// that are on, each with the directions it is on in.
+function lineFilter() {
+  if (isDefaultFilter()) return {};
+  const out = {};
+  for (const [code, set] of Object.entries(lineDirs)) {
+    if (set.size) out[code] = [...set].sort();
+  }
+  return out;
+}
+
+// A chip that already spells the line (a bullet, a tile, a puck) needs no name
+// beside it; WMATA's plain dot does, or the row is just a coloured spot.
+function nameBeside(chip) {
+  return !/>[^<\s][^<]*</.test(chip);
+}
+
+function renderLines(message) {
+  const box = $("lines");
+  const hint = $("lines-hint");
+  if (!selected) {
+    box.innerHTML = "";
+    hint.textContent = "Select a station to choose which lines and directions to show.";
+    renderSwitch();
+    return;
+  }
+  if (message || !stationLines.length) {
+    box.innerHTML = "";
+    hint.textContent = message || "No lines found for this station.";
+    renderSwitch();
+    return;
+  }
+
+  box.innerHTML = stationLines.map((l) => {
+    const set = lineDirs[l.code];
+    const on = set.size > 0;
+    const chip = system.chip ? system.chip(l.code) : "";
+    const dirs = on ? `<div class="dirs">${["1", "2"].map((g) =>
+      `<button type="button" class="dir" data-line="${esc(l.code)}" data-dir="${g}"
+               aria-pressed="${set.has(g)}">→ ${esc(l.dirs[g].title)}${
+        l.dirs[g].sub ? ` <span class="dir-sub">· ${esc(l.dirs[g].sub)}</span>` : ""}</button>`
+    ).join("")}</div>` : "";
+    return `<div class="line-row">
+              <button type="button" class="line-toggle" role="checkbox"
+                      data-line="${esc(l.code)}" aria-checked="${on}">
+                <span class="mark" aria-hidden="true"></span>
+                <span class="chips">${chip}</span>
+                ${nameBeside(chip) ? `<span class="line-name">${esc(l.code)}</span>` : ""}
+              </button>
+              ${dirs}
+            </div>`;
+  }).join("");
+
+  for (const el of box.querySelectorAll(".line-toggle")) {
+    el.onclick = () => toggleLine(el.dataset.line);
+  }
+  for (const el of box.querySelectorAll(".dir")) {
+    el.onclick = () => toggleDir(el.dataset.line, el.dataset.dir);
+  }
+
+  if (!linesChosen()) {
+    hint.innerHTML = `Pick at least one line to show.`;
+  } else if (isDefaultFilter()) {
+    hint.textContent = "Every line is shown in both directions. Untick a line to hide it, or a direction to show that line one way only.";
+  } else {
+    hint.innerHTML = `Only the selected lines and directions will be shown. <button type="button" class="link" id="lines-reset">Show everything</button>`;
+    $("lines-reset").onclick = () => { resetLineDirs(); clearMessage(); renderLines(); refreshButton(); };
+  }
+  renderSwitch();
+}
+
+function renderAdvanced() {
+  $("advanced").hidden = !system;
+  if (selected && linesFor !== selected.code) {
+    loadStationLines(selected);
+  } else if (!selected) {
+    linesFor = null;
+    stationLines = [];
+    lineDirs = {};
+    renderLines();
+  }
+}
+
 // ----------------------------------------------------------------- stations
 
 function note(text) {
@@ -1250,6 +1555,7 @@ function renderList(filter = "") {
     el.onclick = () => {
       selected = stations.find((s) => s.code === el.dataset.code);
       renderList($("search").value);
+      renderAdvanced();
       refreshButton();
     };
   }
@@ -1282,7 +1588,7 @@ function syncCode() {
 
 function refreshButton() {
   const code = codeValue();
-  const ready = Boolean(code && system && selected);
+  const ready = Boolean(code && system && selected && linesChosen());
   $("save").disabled = !ready;
   $("save").textContent = "Save Configuration";
 }
@@ -1314,6 +1620,7 @@ function readStationUrls(disc) {
   for (const s of SYSTEMS) {
     const entry = systems[s.id];
     if (entry && entry.stationInfo) urls[s.id] = entry.stationInfo;
+    if (entry && entry.detailedArrivals) detailedUrls[s.id] = entry.detailedArrivals;
   }
   if (!urls.wmata && disc.endpoints && disc.endpoints.stationInfo) {
     urls.wmata = disc.endpoints.stationInfo;
@@ -1391,6 +1698,13 @@ async function save() {
         ...(themeApplies() ? { boardTheme } : {}),
         // WMATA's modern board only, so no other save touches it.
         ...(wmataHeaderApplies() ? { wmataHeader } : {}),
+        // Advanced settings, sent on every save like the station itself: they
+        // start at their defaults because this page does not read the display's
+        // current configuration, so a save states the whole selection. The
+        // filter is per-station, and {} — every line, both ways — is the
+        // default and is how a filter is cleared.
+        switchSeconds,
+        lineFilter: lineFilter(),
       }),
     });
 
@@ -1432,6 +1746,9 @@ $("code").addEventListener("keydown", (e) => {
 syncCode();
 
 $("search").oninput = (e) => renderList(e.target.value);
+$("switch-down").onclick = () => stepSwitch(-1);
+$("switch-up").onclick = () => stepSwitch(1);
+renderSwitch();
 $("save").onclick = save;
 
 $("systems").addEventListener("scroll", refreshSystemsScroll, { passive: true });
