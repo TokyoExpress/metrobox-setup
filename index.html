@@ -30,7 +30,6 @@
   }
   main { max-width: 560px; margin: 0 auto; padding: 32px 20px 64px; }
 
-  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
   .sub { color: var(--muted); margin: 0 0 32px; }
 
   .step { margin-bottom: 28px; }
@@ -39,13 +38,6 @@
     font-size: 13px; font-weight: 600; text-transform: uppercase;
     letter-spacing: 0.06em; color: var(--muted); margin-bottom: 10px;
   }
-  .step-num {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 20px; height: 20px; border-radius: 50%;
-    background: var(--panel-hi); color: var(--text);
-    font-size: 11px; letter-spacing: 0; flex: none;
-  }
-
   input {
     width: 100%; padding: 12px 14px;
     background: var(--panel); color: var(--text);
@@ -88,7 +80,6 @@
     text-align: left;
     padding-left: calc(50% - 1.5ch - 1.5 * var(--ls));
   }
-  .code-field input:focus { outline: none; border-color: var(--train); }
   /* The ghost must come after the input in the DOM: the input's background is
      opaque and would otherwise paint straight over it. Its own background stays
      transparent so the input's caret shows through. */
@@ -105,7 +96,7 @@
 
   #list {
     margin-top: 10px; max-height: 340px; overflow-y: auto;
-    border: 0px solid var(--line); border-radius: 8px; background: var(--panel);
+    border-radius: 8px; background: var(--panel);
   }
   .station {
     display: flex; align-items: center; gap: 10px;
@@ -164,11 +155,10 @@
     width: 100%; padding: 14px; margin-top: 8px;
     background: var(--train); color: #04150a;
     border: 0; border-radius: 8px;
-    font: 700 16px/1 inherit; cursor: pointer;
+    cursor: pointer;
   }
   button:disabled { background: var(--panel-hi); color: var(--muted); cursor: not-allowed; }
 
-  /* Overrides the block above, so it has to come after it. */
   /* One system per row, full width, however many systems there are: the list
      reads top to bottom and another system just adds another row.
 
@@ -248,8 +238,8 @@
     object-fit: contain; border-radius: 8px;
   }
 
-  /* Step 4 holds two unrelated kinds of control — which board to draw, and how
-     that board behaves — so each gets its own heading. Subordinate to the step
+  /* The display step holds two unrelated kinds of control — which board to
+     draw, and how that board behaves — so each gets its own heading. Subordinate to the step
      label above it: same size and weight, but sentence case rather than the
      tracked-out caps, so the two never read as peers. */
   .section + .section { margin-top: 20px; }
@@ -280,15 +270,12 @@
      auto-placement resolves those first: left implicit, it took the whole first
      column and pushed the title out beside it. */
   .effect .system-title { grid-column: 2; grid-row: 1; font-weight: 500; }
-  .effect .system-subtitle { grid-column: 2; grid-row: 2; }
   .mark {
     grid-column: 1; grid-row: 1 / span 2;
     position: relative; flex: none;
     width: 17px; height: 17px; border-radius: 50%;
     border: 1px solid var(--line); background: var(--panel);
-    /* Centred on the title rather than on the two lines together: the title is
-       the line the mark belongs to, and centring on the pair left it floating
-       between them on the options with a subtitle. */
+    /* Centred on the title line rather than on the row as a whole. */
     align-self: start; margin-top: 3px;
     transition: border-color 0.15s;
   }
@@ -371,7 +358,6 @@
 <body>
 <main>
   <img src="metrobox.svg" role="img" alt="Metrobox logo" />
-  <!-- <h1>Configure your Metrobox</h1> -->
   <p class="sub">Choose your system, station, and other arrival display settings.</p>
 
   <div class="step">
@@ -398,9 +384,9 @@
     <div id="list"><div class="station note"><span class="station-name">Loading stations…</span></div></div>
   </div>
 
-  <!-- Hidden for every system with only one board, which is all of them but
-       New York today. A step offering a single choice is not a choice, and
-       drawing it would put a dead control between the station list and Save. -->
+  <!-- Hidden for any system with fewer than two boards — today, the ones not
+       served yet. A step offering a single choice is not a choice, and drawing
+       it would put a dead control between the station list and Save. -->
   <div class="step" id="design-step" hidden>
     <div class="step-label">Configure Display Settings</div>
 
@@ -474,7 +460,7 @@
 
 <script>
 // The only address this page hardcodes, same as the firmware. Everything else
-// comes back from discovery, so the readers stay movable.
+// comes back from discovery, so the station lists stay movable.
 const DISCOVERY_URL = "https://pvjwz2rcl3.execute-api.us-east-1.amazonaws.com/api/discovery";
 const API_BASE = DISCOVERY_URL.replace(/\/api\/discovery$/, "");
 
@@ -655,8 +641,8 @@ const SYSTEMS = [
     // signs these imitate, and the default should be the sign a rider walking
     // up to one actually sees.
     //
-    // Both entries carry arrivingTakeover, which is the difference between
-    // this system and the other two. New York's effect hangs off one board
+    // Both entries carry arrivingTakeover, which is what sets this system
+    // apart from the rest. New York's effect hangs off one board
     // because only that board marks an arriving train; BART's call-out is a
     // behaviour of the *sign*, and both of its boards do it — the retro one in
     // characters, the modern one in type and dashes. So the setting follows
@@ -791,9 +777,8 @@ const SYSTEMS = [
 SYSTEMS.sort((a, b) => a.title.localeCompare(b.title));
 
 // What the picker actually draws: everything served first, then everything
-// not, each half still alphabetical. With most of the list unbuilt, plain
-// alphabetical buried the three real choices among six dead ones — Boston and
-// Chicago sat above New York. The base order above is what this falls back to
+// not, each half still alphabetical. Plain alphabetical buried the real choices
+// among the unbuilt ones — Chicago sat above New York. The base order above is what this falls back to
 // before discovery answers, when nothing is known to be missing yet.
 function systemsInPickerOrder() {
   if (!discoveryDone) return SYSTEMS;
@@ -815,7 +800,7 @@ const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "bas
 
 let system = null;              // entry from SYSTEMS
 let stationUrls = {};           // system id -> station-info URL from discovery
-let stationCache = {};          // system id -> [{code, name, lines}]
+let stationCache = {};          // system id -> [{code, name, lines, directions}]
 let stations = [];              // the list currently on screen
 let selected = null;
 // Which board the chosen system should draw. Null for a system that offers
@@ -864,18 +849,14 @@ function dotChip(color, line) {
 }
 
 // New York and Los Angeles both draw this one, and each has its own light
-// fills, so the set of codes that take black text is an argument — the same
-// fix tileChip() needed when it gained a second caller.
+// fills, so the set of codes that take black text is an argument. All the
+// lettered chips take it that way, so none can quietly read another system's
+// set.
 function bulletChip(color, line, darkText) {
   const dark = darkText.has(line) ? " on-light" : "";
   return `<span class="chip bullet${dark}" style="background:${color}" title="${esc(line)}">${esc(line)}</span>`;
 }
 
-// Three systems draw this chip and each has its own light fills, so the set of
-// codes that take black text is an argument. It used to close over
-// BART_DARK_TEXT, which was right when BART was the only caller and silently
-// wrong afterwards: MBTA_DARK_TEXT was declared and never read, so Boston's
-// orange had been drawing white-on-#ED8B00 since the day it landed.
 // The MBTA's stadium. Same contents as the others — fill, code, and black text
 // on the light fills — and only the shape differs, so it is the CSS class that
 // changes rather than anything about how a chip is built.
@@ -893,18 +874,7 @@ function chipsFor(lines) {
   // No chip renderer means the system's line codes aren't known yet — draw the
   // name on its own rather than a row of grey unknowns.
   if (!system || !system.chip) return "";
-  let ordered = lines || [];
-  if (system.lineOrder) {
-    // Unknown codes keep their relative place at the end rather than being
-    // dropped or sorted to the front — a new line the page hasn't been told
-    // about should still show up.
-    const rank = (c) => {
-      const i = system.lineOrder.indexOf(c);
-      return i === -1 ? system.lineOrder.length : i;
-    };
-    ordered = ordered.slice().sort((a, b) => rank(a) - rank(b));
-  }
-  return ordered.map(system.chip).join("");
+  return orderedLines(lines || []).map(system.chip).join("");
 }
 
 // ------------------------------------------------------------------ systems
@@ -1027,7 +997,7 @@ function renderPreview() {
     return;
   }
 
-  if (!img.getAttribute("src") || img.getAttribute("src") !== src) {
+  if (img.getAttribute("src") !== src) {
     img.setAttribute("src", src);
   }
   img.alt = `${chosen.title} display for ${system.subtitle}`;
@@ -1077,7 +1047,7 @@ function effectApplies() {
 function renderEffects() {
   const applies = effectApplies();
   // The section, not the group: hiding the group alone would leave the
-  // "Arriving trains" heading standing over nothing.
+  // section's heading standing over nothing.
   $("effects-section").hidden = !applies;
   if (!applies) {
     // Emptied rather than left in place, so a board switched away from does not
@@ -1176,7 +1146,7 @@ const BOARD_THEMES = [
 
 // Whether the chosen board has a theme to pick. Asked of the design rather than
 // of the system, because that is exactly the distinction: every modern board
-// answers yes and every retro board answers no, in all four cities.
+// answers yes and every retro board answers no, in every city.
 function themeApplies() {
   const options = (system && system.designs) || [];
   const chosen = options.find((d) => d.id === design);
@@ -1291,22 +1261,19 @@ function renderSwitch() {
 // with "1"/"2" the groups the device fetches. A direction is missing where no
 // train leaves the station that way — a terminal has one — and a line with no
 // direction at all does not depart here, so it is not offered.
-//
-// A station list published before `directions` existed has none; its lines are
-// then offered both ways under generic names rather than not at all.
 function loadStationLines(station) {
   linesFor = station.code;
-  const known = station.directions;
+  const known = station.directions || {};
   stationLines = orderedLines(station.lines || [])
-    .map((code) => ({
-      code,
-      dirs: known ? (known[code] || {}) : { "1": "Direction 1", "2": "Direction 2" },
-    }))
+    .map((code) => ({ code, dirs: known[code] || {} }))
     .filter((l) => Object.keys(l.dirs).length);
   resetLineDirs();
   renderLines();
 }
 
+// In the system's map order where it has one. Unknown codes keep their relative
+// place at the end rather than being dropped or sorted to the front — a new
+// line the page hasn't been told about should still show up.
 function orderedLines(codes) {
   if (!system.lineOrder) return codes;
   const rank = (c) => {
@@ -1368,12 +1335,12 @@ function nameBeside(chip) {
   return !/>[^<\s][^<]*</.test(chip);
 }
 
-function renderLines(message) {
+function renderLines() {
   const box = $("lines");
-  // Status rather than guidance: without it the section sits empty while the
-  // lines load, which reads as broken.
+  // Status rather than guidance: without it the section would sit empty, which
+  // reads as broken.
   const status = !selected ? "Select a station first."
-    : (message || (!stationLines.length ? "No lines found for this station." : ""));
+    : (!stationLines.length ? "No lines found for this station." : "");
   if (status) {
     box.innerHTML = `<div class="hint">${esc(status)}</div>`;
     return;
@@ -1537,7 +1504,6 @@ function refreshButton() {
   const code = codeValue();
   const ready = Boolean(code && system && selected && linesChosen());
   $("save").disabled = !ready;
-  $("save").textContent = "Save Configuration";
 }
 
 function say(text, kind) {
