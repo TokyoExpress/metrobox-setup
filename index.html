@@ -359,7 +359,6 @@
   }
   .dir:hover { background: var(--panel-hi); }
   .dir[aria-pressed="true"] { color: var(--text); border-color: var(--train); background: var(--panel-hi); }
-  .dir .dir-sub { color: var(--muted); font-weight: 400; }
   .dir:focus-visible { outline: 2px solid var(--train); outline-offset: 2px; }
 
   .msg { margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-size: 14px; display: none; }
@@ -816,7 +815,6 @@ const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "bas
 
 let system = null;              // entry from SYSTEMS
 let stationUrls = {};           // system id -> station-info URL from discovery
-let detailedUrls = {};          // system id -> detailed-arrivals URL, for direction names
 let stationCache = {};          // system id -> [{code, name, lines}]
 let stations = [];              // the list currently on screen
 let selected = null;
@@ -1287,67 +1285,26 @@ function renderSwitch() {
   $("switch-up").disabled = switchSeconds >= SWITCH_MAX;
 }
 
-// Which way each line's trains are headed in each direction, read from what is
-// running right now. The station list knows which lines stop somewhere but not
-// where they go, and a direction named "1" means nothing to anyone.
-async function loadStationLines(station) {
-  const sys = system;
+// Where each line goes from this station, from the schedule rather than from
+// whatever is running: the station list carries it as
+//   directions: {"RD": {"1": "Glenmont", "2": "Shady Grove"}}
+// with "1"/"2" the groups the device fetches. A direction is missing where no
+// train leaves the station that way — a terminal has one — and a line with no
+// direction at all does not depart here, so it is not offered.
+//
+// A station list published before `directions` existed has none; its lines are
+// then offered both ways under generic names rather than not at all.
+function loadStationLines(station) {
   linesFor = station.code;
-  stationLines = [];
-  lineDirs = {};
-  const known = new Map((station.lines || []).map((c) => [c, { "1": new Set(), "2": new Set() }]));
-  const groupLabels = { "1": "", "2": "" };
-  renderLines("Loading lines…");
-
-  const url = detailedUrls[sys.id];
-  if (url) {
-    try {
-      const data = await fetch(`${url}${encodeURIComponent(station.code)}`).then((r) => r.json());
-      for (const g of ["1", "2"]) {
-        const group = (data.groups || {})[g] || {};
-        groupLabels[g] = group.label || "";
-        for (const a of group.arrivals || []) {
-          // The key the readers filter on: `line` where the agency has one,
-          // `route` for New York. Same rule as line_of() on the server.
-          const code = a.line || a.route;
-          if (!code) continue;
-          if (!known.has(code)) known.set(code, { "1": new Set(), "2": new Set() });
-          const dest = fullDestination(sys.id, a);
-          if (dest) known.get(code)[g].add(dest);
-        }
-      }
-    } catch (err) {
-      // Not fatal: the lines still come from the station list, and the
-      // directions fall back to their generic names below.
-    }
-  }
-  // Another station or system was picked while this was in flight.
-  if (system !== sys || !selected || selected.code !== station.code) return;
-
-  stationLines = orderedLines([...known.keys()]).map((code) => {
-    const dirs = {};
-    for (const g of ["1", "2"]) {
-      const dests = [...known.get(code)[g]];
-      dirs[g] = {
-        title: dests.length ? dests.slice(0, 2).join(" / ") : (groupLabels[g] || `Direction ${g}`),
-        sub: dests.length ? groupLabels[g] : "no trains right now",
-      };
-    }
-    return { code, dirs };
-  });
+  const known = station.directions;
+  stationLines = orderedLines(station.lines || [])
+    .map((code) => ({
+      code,
+      dirs: known ? (known[code] || {}) : { "1": "Direction 1", "2": "Direction 2" },
+    }))
+    .filter((l) => Object.keys(l.dirs).length);
   resetLineDirs();
   renderLines();
-}
-
-// A direction's name in full, not the sign abbreviation the boards use. WMATA's
-// own names are abbreviated in every field ("New Crlton", "Shady Grv"), so its
-// terminal is looked up by station code in the station list this page already
-// loaded, which carries the full name. Everyone else's `destinationFull` or
-// `destination` is already the full name.
-function fullDestination(systemId, a) {
-  const list = stationCache[systemId] || [];
-  const byCode = a.destinationCode && list.find((s) => s.code === a.destinationCode);
-  return (byCode && byCode.name) || a.destinationFull || a.destination || a.destinationShort;
 }
 
 function orderedLines(codes) {
@@ -1359,14 +1316,20 @@ function orderedLines(codes) {
   return codes.slice().sort((a, b) => rank(a) - rank(b));
 }
 
+// The directions a line can be shown in here: both, or only one at a terminal.
+function dirsOf(code) {
+  const line = stationLines.find((l) => l.code === code);
+  return line ? Object.keys(line.dirs).sort() : [];
+}
+
 function resetLineDirs() {
   lineDirs = {};
-  for (const l of stationLines) lineDirs[l.code] = new Set(["1", "2"]);
+  for (const l of stationLines) lineDirs[l.code] = new Set(dirsOf(l.code));
 }
 
 function toggleLine(code) {
   const set = lineDirs[code];
-  lineDirs[code] = set.size ? new Set() : new Set(["1", "2"]);
+  lineDirs[code] = set.size ? new Set() : new Set(dirsOf(code));
   clearMessage();
   renderLines();
   refreshButton();
@@ -1385,7 +1348,7 @@ function linesChosen() {
 }
 
 function isDefaultFilter() {
-  return Object.values(lineDirs).every((s) => s.size === 2);
+  return Object.entries(lineDirs).every(([code, s]) => s.size === dirsOf(code).length);
 }
 
 // What the POST carries: {} for every line both ways, otherwise only the lines
@@ -1420,10 +1383,9 @@ function renderLines(message) {
     const set = lineDirs[l.code];
     const on = set.size > 0;
     const chip = system.chip ? system.chip(l.code) : "";
-    const dirs = on ? `<div class="dirs">${["1", "2"].map((g) =>
+    const dirs = on ? `<div class="dirs">${dirsOf(l.code).map((g) =>
       `<button type="button" class="dir" data-line="${esc(l.code)}" data-dir="${g}"
-               aria-pressed="${set.has(g)}">→ ${esc(l.dirs[g].title)}${
-        l.dirs[g].sub ? ` <span class="dir-sub">· ${esc(l.dirs[g].sub)}</span>` : ""}</button>`
+               aria-pressed="${set.has(g)}">→ ${esc(l.dirs[g])}</button>`
     ).join("")}</div>` : "";
     return `<div class="line-row">
               <button type="button" class="line-toggle" role="checkbox"
@@ -1484,7 +1446,7 @@ async function loadStations() {
   try {
     const data = await fetch(url).then((r) => r.json());
     const list = Object.entries(data)
-      .map(([code, s]) => ({ code, name: s.name, lines: s.lines || [] }))
+      .map(([code, s]) => ({ code, name: s.name, lines: s.lines || [], directions: s.directions }))
       .sort((a, b) => collator.compare(a.name, b.name) || collator.compare(a.code, b.code));
 
     // A system whose daily poller has never succeeded serves {} rather than
@@ -1605,7 +1567,6 @@ function readStationUrls(disc) {
   for (const s of SYSTEMS) {
     const entry = systems[s.id];
     if (entry && entry.stationInfo) urls[s.id] = entry.stationInfo;
-    if (entry && entry.detailedArrivals) detailedUrls[s.id] = entry.detailedArrivals;
   }
   if (!urls.wmata && disc.endpoints && disc.endpoints.stationInfo) {
     urls.wmata = disc.endpoints.stationInfo;
