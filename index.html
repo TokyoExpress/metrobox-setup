@@ -361,10 +361,6 @@
   .dir[aria-pressed="true"] { color: var(--text); border-color: var(--train); background: var(--panel-hi); }
   .dir .dir-sub { color: var(--muted); font-weight: 400; }
   .dir:focus-visible { outline: 2px solid var(--train); outline-offset: 2px; }
-  .link {
-    width: auto; margin: 0; padding: 0; background: none; border: 0;
-    color: var(--train); font-weight: 500; font-size: 13px; line-height: 1.5; font-family: inherit; cursor: pointer;
-  }
 
   .msg { margin-top: 14px; padding: 12px 14px; border-radius: 8px; font-size: 14px; display: none; }
   .msg.show { display: block; }
@@ -465,13 +461,11 @@
         <output id="switch-value" aria-live="polite">5 seconds</output>
         <button type="button" id="switch-up" aria-label="More seconds">+</button>
       </div>
-      <div class="hint" id="switch-hint">How long the display shows one direction before switching to the other.</div>
     </div>
 
     <div class="section">
-      <div class="section-label" id="lines-label">Lines and directions</div>
+      <div class="section-label" id="lines-label">Filter lines and directions</div>
       <div id="lines" role="group" aria-labelledby="lines-label"></div>
-      <div class="hint" id="lines-hint"></div>
     </div>
   </details>
 
@@ -1291,11 +1285,6 @@ function renderSwitch() {
   $("switch-value").textContent = `${switchSeconds} seconds`;
   $("switch-down").disabled = switchSeconds <= SWITCH_MIN;
   $("switch-up").disabled = switchSeconds >= SWITCH_MAX;
-  const oneWay = stationLines.length > 0 && !["1", "2"].every(
-    (g) => Object.values(lineDirs).some((set) => set.has(g)));
-  $("switch-hint").textContent = oneWay
-    ? "Only one direction is selected below, so the display will not switch."
-    : "How long the display shows one direction before switching to the other.";
 }
 
 // Which way each line's trains are headed in each direction, read from what is
@@ -1407,17 +1396,12 @@ function nameBeside(chip) {
 
 function renderLines(message) {
   const box = $("lines");
-  const hint = $("lines-hint");
-  if (!selected) {
-    box.innerHTML = "";
-    hint.textContent = "Select a station to choose which lines and directions to show.";
-    renderSwitch();
-    return;
-  }
-  if (message || !stationLines.length) {
-    box.innerHTML = "";
-    hint.textContent = message || "No lines found for this station.";
-    renderSwitch();
+  // Status rather than guidance: without it the section sits empty while the
+  // lines load, which reads as broken.
+  const status = !selected ? "Select a station first."
+    : (message || (!stationLines.length ? "No lines found for this station." : ""));
+  if (status) {
+    box.innerHTML = `<div class="hint">${esc(status)}</div>`;
     return;
   }
 
@@ -1447,16 +1431,6 @@ function renderLines(message) {
   for (const el of box.querySelectorAll(".dir")) {
     el.onclick = () => toggleDir(el.dataset.line, el.dataset.dir);
   }
-
-  if (!linesChosen()) {
-    hint.innerHTML = `Pick at least one line to show.`;
-  } else if (isDefaultFilter()) {
-    hint.textContent = "Every line is shown in both directions. Untick a line to hide it, or a direction to show that line one way only.";
-  } else {
-    hint.innerHTML = `Only the selected lines and directions will be shown. <button type="button" class="link" id="lines-reset">Show everything</button>`;
-    $("lines-reset").onclick = () => { resetLineDirs(); clearMessage(); renderLines(); refreshButton(); };
-  }
-  renderSwitch();
 }
 
 function renderAdvanced() {
