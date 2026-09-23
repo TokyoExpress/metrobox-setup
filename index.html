@@ -1312,7 +1312,7 @@ async function loadStationLines(station) {
           const code = a.line || a.route;
           if (!code) continue;
           if (!known.has(code)) known.set(code, { "1": new Set(), "2": new Set() });
-          const dest = a.destinationShort || a.destination || a.destinationFull;
+          const dest = fullDestination(sys.id, a);
           if (dest) known.get(code)[g].add(dest);
         }
       }
@@ -1337,6 +1337,17 @@ async function loadStationLines(station) {
   });
   resetLineDirs();
   renderLines();
+}
+
+// A direction's name in full, not the sign abbreviation the boards use. WMATA's
+// own names are abbreviated in every field ("New Crlton", "Shady Grv"), so its
+// terminal is looked up by station code in the station list this page already
+// loaded, which carries the full name. Everyone else's `destinationFull` or
+// `destination` is already the full name.
+function fullDestination(systemId, a) {
+  const list = stationCache[systemId] || [];
+  const byCode = a.destinationCode && list.find((s) => s.code === a.destinationCode);
+  return (byCode && byCode.name) || a.destinationFull || a.destination || a.destinationShort;
 }
 
 function orderedLines(codes) {
