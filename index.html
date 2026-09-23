@@ -125,18 +125,36 @@
      plain dot carries all of it. The rest need the letter — 1/2/3 are one red
      and 4/5/6 one green, and BART's codes *are* the colours — and it sits in
      the shape the agency puts it in: a circle for New York's bullets and for
-     Metro's line icons, a rounded square for BART, Boston and Chicago. The
-     same split displayStationLines() makes in the firmware. */
+     Metro's line icons, a stadium puck for the MBTA, a rounded square for
+     BART.
+
+     The firmware's displayStationLines() makes a coarser split — circle or
+     rounded square, no puck — and that is deliberate rather than drift. The
+     panel's station header is a different object at a different size, where
+     the puck's extra width costs room the header does not have; this page has
+     a whole row per station. */
   .chip { width: 10px; height: 10px; border-radius: 50%; flex: none; }
-  .chip.bullet, .chip.tile {
-    width: 19px; height: 19px;
+  .chip.bullet, .chip.tile, .chip.puck {
+    height: 19px;
     display: inline-flex; align-items: center; justify-content: center;
     font: 700 12px/1 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
     color: #fff;
   }
+  .chip.bullet, .chip.tile { width: 19px; }
   /* 2px, the same radius the panel rounds these to (line_shape_corner_radius
      is 2 for BART in every DisplayProfile). */
   .chip.tile { border-radius: 2px; }
+  /* The MBTA's own badge: a stadium, wider than it is tall, with the line's
+     two-character code in it. Fully rounded rather than a large fixed radius,
+     so the ends stay semicircular whatever the height becomes.
+
+     Width is the content's, not a fixed figure: "GL" and "RD" set it here, but
+     the four Green branches are the reason it cannot be square — the shape has
+     to hold two characters without crowding them against the edge. */
+  .chip.puck {
+    width: auto; min-width: 30px; padding: 0 7px;
+    border-radius: 999px;
+  }
   /* Black on the light fills — the MTA's N/Q/R/W yellow, BART's yellow and
      orange, Metro's E Line amber; white on everything else. Same rule as
      getLineTextColor(). */
@@ -584,7 +602,7 @@ const SYSTEMS = [
     title: "Boston Subway",
     subtitle: "MBTA",
     searchHint: "Search stations…",
-    chip: (line) => tileChip(MBTA_COLORS[line] || "#666", line, MBTA_DARK_TEXT),
+    chip: (line) => puckChip(MBTA_COLORS[line] || "#666", line, MBTA_DARK_TEXT),
     lineOrder: MBTA_ORDER,
     // Retro first, like Washington and the Bay Area. Boston's platforms are
     // still mostly the amber LED signs the retro rows imitate, so that is the
@@ -775,6 +793,14 @@ function bulletChip(color, line, darkText) {
 // BART_DARK_TEXT, which was right when BART was the only caller and silently
 // wrong afterwards: MBTA_DARK_TEXT was declared and never read, so Boston's
 // orange had been drawing white-on-#ED8B00 since the day it landed.
+// The MBTA's stadium. Same contents as the others — fill, code, and black text
+// on the light fills — and only the shape differs, so it is the CSS class that
+// changes rather than anything about how a chip is built.
+function puckChip(color, line, darkText) {
+  const dark = darkText.has(line) ? " on-light" : "";
+  return `<span class="chip puck${dark}" style="background:${color}" title="${esc(line)}">${esc(line)}</span>`;
+}
+
 function tileChip(color, line, darkText) {
   const dark = darkText.has(line) ? " on-light" : "";
   return `<span class="chip tile${dark}" style="background:${color}" title="${esc(line)}">${esc(line)}</span>`;
