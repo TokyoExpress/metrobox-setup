@@ -428,14 +428,6 @@
       <div class="effects" id="takeover" role="radiogroup" aria-labelledby="takeover-label"></div>
     </div>
 
-    <!-- Shown for every modern board and no retro one, which is why it sits
-         beside the two above rather than inside either of them: those are one
-         agency's setting each, and this one is every agency's. -->
-    <div class="section" id="theme-section" hidden>
-      <div class="section-label" id="theme-label">Arrivals color scheme</div>
-      <div class="effects" id="theme" role="radiogroup" aria-labelledby="theme-label"></div>
-    </div>
-
     <!-- WMATA's modern board only: its column-header strip. -->
     <div class="section" id="wmata-header-section" hidden>
       <div class="section-label" id="wmata-header-label">Column header</div>
@@ -471,6 +463,15 @@
         <option value="America/Anchorage">Alaska</option>
         <option value="Pacific/Honolulu">Hawaii</option>
       </select>
+    </div>
+
+    <!-- Dark or light. Shown for every modern board and no retro one, so it
+         appears and disappears with the display style chosen above even though
+         it now lives in here: it is every agency's setting rather than one
+         agency's, and a preference more than a board. -->
+    <div class="section" id="theme-section" hidden>
+      <div class="section-label" id="theme-label">Arrivals color scheme</div>
+      <div class="effects" id="theme" role="radiogroup" aria-labelledby="theme-label"></div>
     </div>
 
     <div class="section">
