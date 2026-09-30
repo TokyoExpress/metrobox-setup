@@ -734,15 +734,18 @@ const SYSTEMS = [
     // No previews yet, the same as BART and Boston: there are no stills of
     // either board to link, and renderPreview() drops the frame rather than
     // showing a broken one.
+    //
+    // Modern first, because the first entry is the one a fresh selection starts
+    // on, and Los Angeles's modern board is the one worth leading with.
     designs: [
-      {
-        id: "classic",
-        title: "Retro",
-      },
       {
         id: "modern",
         title: "Modern",
         theme: true,
+      },
+      {
+        id: "classic",
+        title: "Retro",
       },
     ],
   },
