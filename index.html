@@ -319,6 +319,17 @@
   .stepper button:disabled { color: var(--line); background: var(--panel); }
   .stepper output { min-width: 92px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
 
+  /* Set in the stepper's own terms — the same panel, line and radius — so the
+     two controls in this section read as one family. */
+  #time-zone {
+    width: 100%; max-width: 360px; height: 36px; padding: 0 10px; margin: 0;
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px;
+    font: inherit; font-weight: 600;
+  }
+  #time-zone:hover { background: var(--panel-hi); }
+  #time-zone:focus-visible { outline: 2px solid var(--train); outline-offset: 2px; }
+
   /* One row per line: a checkbox, the line's own chip, and — while the line is
      on — a pill per direction, named by where its trains are going. */
   .line-row {
@@ -446,6 +457,20 @@
         <output id="switch-value" aria-live="polite">5 seconds</output>
         <button type="button" id="switch-up" aria-label="More seconds">+</button>
       </div>
+    </div>
+
+    <div class="section">
+      <label class="section-label" for="time-zone">Time zone</label>
+      <select id="time-zone">
+        <option value="">Automatic (the system's city)</option>
+        <option value="America/New_York">Eastern</option>
+        <option value="America/Chicago">Central</option>
+        <option value="America/Denver">Mountain</option>
+        <option value="America/Phoenix">Mountain (Arizona, no daylight saving)</option>
+        <option value="America/Los_Angeles">Pacific</option>
+        <option value="America/Anchorage">Alaska</option>
+        <option value="Pacific/Honolulu">Hawaii</option>
+      </select>
     </div>
 
     <div class="section">
@@ -1619,6 +1644,9 @@ async function save() {
         // filter is per-station, and {} — every line, both ways — is the
         // default and is how a filter is cleared.
         switchSeconds,
+        // "" is automatic: the display shows the time in the city of the system
+        // it is set to. Sent on every save, like the dwell above.
+        timeZone: $("time-zone").value,
         lineFilter: lineFilter(),
       }),
     });
