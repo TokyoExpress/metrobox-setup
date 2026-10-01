@@ -433,6 +433,12 @@
       <div class="section-label" id="wmata-header-label">Column header</div>
       <div class="effects" id="wmata-header" role="radiogroup" aria-labelledby="wmata-header-label"></div>
     </div>
+
+    <!-- LA Metro's modern board only: group trains by destination. -->
+    <div class="section" id="la-grouping-section" hidden>
+      <div class="section-label" id="la-grouping-label">Group by destination</div>
+      <div class="effects" id="la-grouping" role="radiogroup" aria-labelledby="la-grouping-label"></div>
+    </div>
   </div>
 
   <!-- Advanced settings: closed by default, because every default in it is
@@ -753,6 +759,8 @@ const SYSTEMS = [
         id: "modern",
         title: "Modern",
         theme: true,
+        // One row per destination with the next two times, under a header.
+        lametroGrouping: true,
       },
       {
         id: "classic",
@@ -872,6 +880,9 @@ let boardTheme = "dark";
 // Whether WMATA's modern board draws its column-header strip. "show" to start,
 // which is what every such board drew before this was a setting.
 let wmataHeader = "show";
+// Whether LA Metro's modern board groups trains by destination. "off" to start,
+// which is what every such board did before this was a setting.
+let lametroGrouping = "off";
 
 function dotChip(color, line) {
   return `<span class="chip" style="background:${color}" title="${esc(line)}"></span>`;
@@ -986,6 +997,7 @@ function renderDesigns() {
     renderTakeover();
     renderTheme();
     renderWmataHeader();
+    renderLametroGrouping();
     return;
   }
 
@@ -1005,6 +1017,7 @@ function renderDesigns() {
   renderTakeover();
   renderTheme();
   renderWmataHeader();
+  renderLametroGrouping();
 }
 
 // The still for the selected board. The src is only ever written when it
@@ -1247,6 +1260,45 @@ function selectWmataHeader(id) {
   wmataHeader = id;
   clearMessage();
   renderWmataHeader();
+}
+
+const LAMETRO_GROUPINGS = [
+  { id: "off", title: "Off" },
+  { id: "on", title: "On" },
+];
+
+function lametroGroupingApplies() {
+  const options = (system && system.designs) || [];
+  const chosen = options.find((d) => d.id === design);
+  return Boolean(chosen && chosen.lametroGrouping);
+}
+
+function renderLametroGrouping() {
+  const applies = lametroGroupingApplies();
+  $("la-grouping-section").hidden = !applies;
+  if (!applies) {
+    $("la-grouping").innerHTML = "";
+    return;
+  }
+
+  $("la-grouping").innerHTML = LAMETRO_GROUPINGS.map((g) =>
+    `<button type="button" class="effect" role="radio" data-id="${esc(g.id)}"
+             aria-checked="${lametroGrouping === g.id}">
+       <span class="mark" aria-hidden="true"></span>
+       <span class="system-title">${esc(g.title)}</span>
+     </button>`
+  ).join("");
+
+  for (const el of $("la-grouping").children) {
+    el.onclick = () => selectLametroGrouping(el.dataset.id);
+  }
+}
+
+function selectLametroGrouping(id) {
+  if (lametroGrouping === id) return;
+  lametroGrouping = id;
+  clearMessage();
+  renderLametroGrouping();
 }
 
 // ---------------------------------------------------------- advanced settings
@@ -1639,6 +1691,8 @@ async function save() {
         ...(themeApplies() ? { boardTheme } : {}),
         // WMATA's modern board only, so no other save touches it.
         ...(wmataHeaderApplies() ? { wmataHeader } : {}),
+        // LA Metro's modern board only, for the same reason.
+        ...(lametroGroupingApplies() ? { lametroGrouping } : {}),
         // Advanced settings, sent on every save like the station itself: they
         // start at their defaults because this page does not read the display's
         // current configuration, so a save states the whole selection. The
