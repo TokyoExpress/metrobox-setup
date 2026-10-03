@@ -159,6 +159,8 @@
     display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px;
     max-height: 176px; overflow-y: auto; padding: 2px;
   }
+  /* "to Potomac Yard", set under the stop's name. */
+  .heading { display: block; font-size: 12px; font-weight: 400; opacity: .7; margin-top: 2px; }
   .route-pick { cursor: pointer; outline-offset: 2px; }
   .route-pick[aria-selected="true"] { outline: 2px solid var(--train); }
   .route-pick:focus-visible { outline: 2px solid #fff; }
@@ -1755,6 +1757,17 @@ function matches(s, q) {
   return Boolean(system.searchLines) && (s.lines || []).some((l) => l.toLowerCase() === q);
 }
 
+// Metrobus only: which way the chosen route's bus goes from this stop. The two
+// sides of a street are two stops with the same name, and without this the
+// picker would show a pair of identical rows and no way to tell the platform
+// a rider stands on from the one across the road.
+function headingFor(s) {
+  if (!system || !system.routeFirst || !route) return "";
+  const dirs = s.directions && s.directions[route];
+  const toward = dirs ? Object.values(dirs).join(" / ") : "";
+  return toward ? `<span class="heading">to ${esc(toward)}</span>` : "";
+}
+
 function renderList(filter = "") {
   const q = filter.trim().toLowerCase();
   const shown = stations.filter((s) => matches(s, q));
@@ -1768,7 +1781,7 @@ function renderList(filter = "") {
     .map(
       (s) => `<div class="station" role="option" data-code="${esc(s.code)}"
                    aria-selected="${selected !== null && selected.code === s.code}">
-                <span class="station-name">${esc(s.name)}</span>
+                <span class="station-name">${esc(s.name)}${headingFor(s)}</span>
                 <span class="chips">${chipsFor(s.lines)}</span>
               </div>`
     )
