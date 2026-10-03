@@ -584,6 +584,19 @@ const LAMETRO_DARK_TEXT = new Set(["E"]);
 // the deployed blob can be up to a day behind a change to it.
 const LAMETRO_ORDER = ["A", "B", "C", "D", "E", "K"];
 
+// MARTA's own line colours, from LINES in the marta_trains poller, at full
+// width for the reason LAMETRO_COLORS is. Two-letter codes, the vocabulary
+// Boston and Chicago use — and the same codes the firmware's getLineColor()
+// matches on, so a station's dots here are the dots its header draws.
+const MARTA_COLORS = {
+  RD: "#CE242B", GD: "#D4A723", BL: "#0075B2", GN: "#009D4B",
+};
+// What a rider calls them, for the tooltip: the dot carries no letter.
+const MARTA_NAMES = { RD: "Red", GD: "Gold", BL: "Blue", GN: "Green" };
+// Red, Gold, Blue, Green — the order LINE_CODES carries in the
+// generate_marta_reference script, repeated here for the reason BART_ORDER is.
+const MARTA_ORDER = ["RD", "GD", "BL", "GN"];
+
 // The systems this page knows how to present. Which of them a user can
 // actually pick is decided by discovery — an entry with no station-info URL
 // renders disabled rather than silently missing, because "New York isn't
@@ -769,6 +782,31 @@ const SYSTEMS = [
     ],
   },
 
+  {
+    id: "marta",
+    title: "Atlanta Rail",
+    subtitle: "MARTA",
+    searchHint: "Search stations…",
+    chip: (line) => dotChip(MARTA_COLORS[line] || "#666", MARTA_NAMES[line] || line),
+    lineOrder: MARTA_ORDER,
+    // Black type on white is what MARTA's screens are, so a fresh selection
+    // starts on the light theme — see selectSystem(). Dark is still a click
+    // away. Modern first, as in Los Angeles; the retro rows are plain white,
+    // since no MARTA character board has turned up to copy.
+    defaultTheme: "light",
+    designs: [
+      {
+        id: "modern",
+        title: "Modern",
+        theme: true,
+      },
+      {
+        id: "classic",
+        title: "Retro",
+      },
+    ],
+  },
+
   // ---- Not served yet. Titles are what a rider in that city calls the thing,
   // since that is what the picker is read as.
   {
@@ -905,6 +943,13 @@ function puckChip(color, line, darkText) {
   return `<span class="chip puck${dark}" style="background:${color}" title="${esc(line)}">${esc(line)}</span>`;
 }
 
+// MARTA's marker: a filled dot with nothing in it. The base .chip is exactly
+// that, so this is a plain span. MARTA's station signs hang coloured dots under
+// the name rather than letters, and the panel's header draws the same.
+function dotChip(color, name) {
+  return `<span class="chip" style="background:${color}" title="${esc(name)}"></span>`;
+}
+
 function tileChip(color, line, darkText) {
   const dark = darkText.has(line) ? " on-light" : "";
   return `<span class="chip tile${dark}" style="background:${color}" title="${esc(line)}">${esc(line)}</span>`;
@@ -960,9 +1005,19 @@ async function selectSystem(id) {
   const next = SYSTEMS.find((s) => s.id === id);
   if (!next || (system && system.id === id)) return;
 
+  const previous = system;
   system = next;
   selected = null;
   stations = [];
+  // A system can lead with the light theme (MARTA's screens are black on
+  // white). Moving *off* one puts it back to dark rather than carrying light
+  // into a city whose boards were all drawn dark first; every other move leaves
+  // the pick alone, as it always did.
+  if (next.defaultTheme) {
+    boardTheme = next.defaultTheme;
+  } else if (previous && previous.defaultTheme) {
+    boardTheme = "dark";
+  }
   // Back to the new system's default board rather than carrying the last
   // system's pick across — "classic" chosen for New York means nothing in
   // Washington, and would be wrong again on the way back if New York's
