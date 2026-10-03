@@ -125,7 +125,7 @@
      the puck's extra width costs room the header does not have; this page has
      a whole row per station. */
   .chip { width: 10px; height: 10px; border-radius: 50%; flex: none; }
-  .chip.bullet, .chip.tile, .chip.puck {
+  .chip.bullet, .chip.tile, .chip.puck, .chip.pill {
     height: 19px;
     display: inline-flex; align-items: center; justify-content: center;
     font: 700 12px/1 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
@@ -146,6 +146,22 @@
     width: auto; min-width: 30px; padding: 0 7px;
     border-radius: 999px;
   }
+  /* Metrobus's route marker: a rounded rectangle as wide as the route's name
+     needs, the way the panel's header draws it and WMATA's own stop pages do.
+     Rounded rather than a stadium, which is the MBTA's shape. */
+  .chip.pill {
+    width: auto; min-width: 34px; padding: 0 8px;
+    border-radius: 6px;
+  }
+  /* The route step of a route-first system. These are chips, not <button>s: the
+     page's button style is the full-width Save control. */
+  .routes {
+    display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px;
+    max-height: 176px; overflow-y: auto; padding: 2px;
+  }
+  .route-pick { cursor: pointer; outline-offset: 2px; }
+  .route-pick[aria-selected="true"] { outline: 2px solid var(--train); }
+  .route-pick:focus-visible { outline: 2px solid #fff; }
   /* Black on the light fills — the MTA's N/Q/R/W yellow, BART's yellow and
      orange, Metro's E Line amber; white on everything else. Same rule as
      getLineTextColor(). */
@@ -390,6 +406,14 @@
        then, and an empty box explaining why it is empty is just clutter. -->
   <div class="step" id="station-step" hidden>
     <div class="step-label" id="station-label">Select station</div>
+    <!-- Only for a route-first system (Metrobus): ~7,500 stops are too many to
+         choose from, so the rider picks a route and the list below is that
+         route's stops. -->
+    <div id="route-picker" hidden>
+      <input id="route-search" placeholder="Search routes, like A70…" autocomplete="off"
+             aria-label="Route">
+      <div class="routes" id="routes" role="listbox" aria-label="Routes"></div>
+    </div>
     <input id="search" placeholder="Search stations…" autocomplete="off"
            aria-labelledby="station-label" disabled>
     <div id="list"><div class="station note"><span class="station-name">Loading stations…</span></div></div>
@@ -596,6 +620,11 @@ const MARTA_NAMES = { RD: "Red", GD: "Gold", BL: "Blue", GN: "Green" };
 // Red, Gold, Blue, Green — the order LINE_CODES carries in the
 // generate_marta_reference script, repeated here for the reason BART_ORDER is.
 const MARTA_ORDER = ["RD", "GD", "BL", "GN"];
+
+// Metrobus draws every route in one blue — WMATA's data carries no per-route
+// colour, and the route's name on the pill is what tells them apart. The same
+// #1F5AA6 as the poller's BUS_COLOR, which the panel reduces to RGB565.
+const WMATA_BUS_BLUE = "#1F5AA6";
 
 // The systems this page knows how to present. Which of them a user can
 // actually pick is decided by discovery — an entry with no station-info URL
@@ -821,10 +850,26 @@ const SYSTEMS = [
     title: "Washington Metro Bus",
     subtitle: "WMATA",
     searchHint: "Search stops…",
-    // A bus stop is served by however many routes happen to pass it, and the
-    // route names are not a small fixed set the way a rail network's are.
-    // Whatever these get, it will not be the rail bullet.
-    chip: null,
+    // ~7,500 stops: nobody picks from a list that long, so the rider chooses a
+    // route first and the list is that route's stops. See loadRouteFirst().
+    routeFirst: true,
+    // A stop is served by however many routes pass it, so a row carries a pill
+    // per route — a rounded rectangle as wide as the name needs, the shape the
+    // panel's header uses. One colour, because WMATA's data has no per-route one.
+    chip: (line) => pillChip(WMATA_BUS_BLUE, line),
+    // Modern first, as in Los Angeles and Atlanta. The retro rows copy the amber
+    // LED sign in Metrobus shelters: route, headsign, minutes.
+    designs: [
+      {
+        id: "modern",
+        title: "Modern",
+        theme: true,
+      },
+      {
+        id: "classic",
+        title: "Retro",
+      },
+    ],
   },
   {
     id: "cta",
@@ -878,6 +923,9 @@ let stationUrls = {};           // system id -> station-info URL from discovery
 let stationCache = {};          // system id -> [{code, name, lines, directions}]
 let stations = [];              // the list currently on screen
 let selected = null;
+// Route-first systems only: the route chosen, and the routes on offer.
+let route = null;
+let routeList = null;
 // Which board the chosen system should draw. Null for a system that offers
 // only one, which is the same thing as "the system's default" — the field is
 // then left out of the POST entirely rather than sent empty, so a system with
@@ -950,6 +998,11 @@ function dotChip(color, name) {
   return `<span class="chip" style="background:${color}" title="${esc(name)}"></span>`;
 }
 
+// Metrobus's route marker. See .chip.pill.
+function pillChip(color, line) {
+  return `<span class="chip pill" style="background:${color}" title="${esc(line)}">${esc(line)}</span>`;
+}
+
 function tileChip(color, line, darkText) {
   const dark = darkText.has(line) ? " on-light" : "";
   return `<span class="chip tile${dark}" style="background:${color}" title="${esc(line)}">${esc(line)}</span>`;
@@ -1009,6 +1062,13 @@ async function selectSystem(id) {
   system = next;
   selected = null;
   stations = [];
+  route = null;
+  routeList = null;
+  $("route-search").value = "";
+  $("route-picker").hidden = !next.routeFirst;
+  $("station-label").textContent = next.routeFirst ? "Select route, then stop" : "Select station";
+  // A stop list for the old system's route must not be left under the new one's.
+  $("routes").innerHTML = "";
   // A system can lead with the light theme (MARTA's screens are black on
   // white). Moving *off* one puts it back to dark rather than carrying light
   // into a city whose boards were all drawn dark first; every other move leaves
@@ -1527,7 +1587,122 @@ function note(text) {
   $("list").innerHTML = `<div class="station note"><span class="station-name">${esc(text)}</span></div>`;
 }
 
+// The stations of one system, from a station-info URL.
+function parseStations(data) {
+  return Object.entries(data)
+    .map(([code, s]) => ({ code, name: s.name, lines: s.lines || [], directions: s.directions }))
+    .sort((a, b) => collator.compare(a.name, b.name) || collator.compare(a.code, b.code));
+}
+
+// Route-first systems: routes first, then that route's stops.
+async function loadRouteFirst() {
+  const id = system.id;
+  const base = stationUrls[id];
+  $("search").disabled = true;
+  if (!base) {
+    note(`${system.title} isn't being served yet.`);
+    return;
+  }
+
+  if (!routeList) {
+    note("Loading routes…");
+    try {
+      const data = await fetch(`${base}?routes=1`).then((r) => r.json());
+      if (system.id !== id) return;
+      routeList = data.routes || [];
+    } catch (err) {
+      if (system.id !== id) return;
+      note("Couldn't load routes — is the server up?");
+      say(`Route list failed: ${err.message}`, "err");
+      return;
+    }
+    if (!routeList.length) {
+      note(`No routes published for ${system.title} yet.`);
+      return;
+    }
+  }
+
+  renderRoutes($("route-search").value);
+  if (!route) {
+    note("Choose a route to see its stops.");
+    return;
+  }
+  await loadRouteStops();
+}
+
+function renderRoutes(filter = "") {
+  const q = filter.trim().toLowerCase();
+  const shown = (routeList || []).filter((r) => !q || r.toLowerCase().includes(q));
+  $("routes").innerHTML = shown.length
+    ? shown
+        .map(
+          (r) => `<span class="chip pill route-pick" role="option" tabindex="0"
+                        data-route="${esc(r)}" aria-selected="${route === r}"
+                        style="background:${WMATA_BUS_BLUE}">${esc(r)}</span>`
+        )
+        .join("")
+    : `<span class="note">No route matches “${esc(filter)}”</span>`;
+
+  for (const el of $("routes").querySelectorAll(".route-pick")) {
+    const pick = () => selectRoute(el.dataset.route);
+    el.onclick = pick;
+    el.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        pick();
+      }
+    };
+  }
+}
+
+async function selectRoute(r) {
+  if (route === r) return;
+  route = r;
+  selected = null;
+  stations = [];
+  $("search").value = "";
+  clearMessage();
+  renderRoutes($("route-search").value);
+  renderAdvanced();
+  refreshButton();
+  await loadRouteStops();
+}
+
+async function loadRouteStops() {
+  const id = system.id;
+  const chosen = route;
+  const key = `${id}:${chosen}`;
+  $("search").placeholder = `Search ${chosen} stops…`;
+
+  if (!stationCache[key]) {
+    $("search").disabled = true;
+    note(`Loading ${chosen} stops…`);
+    try {
+      const data = await fetch(`${stationUrls[id]}?line=${encodeURIComponent(chosen)}`).then((r) => r.json());
+      const list = parseStations(data);
+      if (!list.length) {
+        if (system.id === id && route === chosen) note(`No stops published for ${chosen} yet.`);
+        return;
+      }
+      stationCache[key] = list;
+    } catch (err) {
+      if (system.id !== id || route !== chosen) return;
+      note("Couldn't load stops — is the server up?");
+      say(`Stop list failed: ${err.message}`, "err");
+      return;
+    }
+  }
+  // The await means another route or system may have been picked meanwhile;
+  // caching is still worth keeping, drawing the stale list is not.
+  if (system.id !== id || route !== chosen) return;
+
+  stations = stationCache[key];
+  renderList($("search").value);
+  $("search").disabled = false;
+}
+
 async function loadStations() {
+  if (system.routeFirst) return loadRouteFirst();
   const id = system.id;
 
   if (stationCache[id]) {
@@ -1548,9 +1723,7 @@ async function loadStations() {
 
   try {
     const data = await fetch(url).then((r) => r.json());
-    const list = Object.entries(data)
-      .map(([code, s]) => ({ code, name: s.name, lines: s.lines || [], directions: s.directions }))
-      .sort((a, b) => collator.compare(a.name, b.name) || collator.compare(a.code, b.code));
+    const list = parseStations(data);
 
     // A system whose daily poller has never succeeded serves {} rather than
     // failing, which would otherwise read as "no stations match".
@@ -1799,6 +1972,7 @@ $("code").addEventListener("keydown", (e) => {
 syncCode();
 
 $("search").oninput = (e) => renderList(e.target.value);
+$("route-search").oninput = (e) => renderRoutes(e.target.value);
 $("switch-down").onclick = () => stepSwitch(-1);
 $("switch-up").onclick = () => stepSwitch(1);
 renderSwitch();
