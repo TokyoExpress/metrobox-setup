@@ -749,6 +749,10 @@ const SYSTEMS = [
     searchHint: "Search stations…",
     chip: (line) => puckChip(MBTA_COLORS[line] || "#666", line, MBTA_DARK_TEXT),
     lineOrder: MBTA_ORDER,
+    // The modern board is dark type on a light ground, like the real sign, so a
+    // fresh selection starts on the light theme — see selectSystem() and the
+    // same default in get_device_config. Dark is still a click away.
+    defaultTheme: "light",
     // Retro first, like Washington and the Bay Area. Boston's platforms are
     // still mostly the amber LED signs the retro rows imitate, so that is the
     // board a rider walking up to one actually sees.
