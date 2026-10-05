@@ -623,6 +623,22 @@ const MARTA_NAMES = { RD: "Red", GD: "Gold", BL: "Blue", GN: "Green" };
 // generate_marta_reference script, repeated here for the reason BART_ORDER is.
 const MARTA_ORDER = ["RD", "GD", "BL", "GN"];
 
+// CTA's own line colours, from CTA's brand standards, the same hex the
+// cta_trains poller's LINES carries and the firmware's CTA_* constants reduce
+// to RGB565. Two-character codes, forced rather than chosen: CTA names its lines
+// by colour, and no single letter separates Blue from Brown or Pink from Purple.
+// "BL"/"BR" and "PK"/"PU" do.
+const CTA_COLORS = {
+  RD: "#C60C30", BL: "#00A1DE", BR: "#62361B", GR: "#009B3A",
+  OR: "#F9461C", PU: "#522398", PK: "#E27EA6", YL: "#F9E300",
+};
+// Yellow is the one fill too pale for white type.
+const CTA_DARK_TEXT = new Set(["YL"]);
+// Red, Blue, Brown, Green, Orange, Purple, Pink, Yellow — the order LINES
+// carries in the cta_trains poller, repeated here for the reason BART_ORDER is:
+// the deployed blob can be up to a day behind a change.
+const CTA_ORDER = ["RD", "BL", "BR", "GR", "OR", "PU", "PK", "YL"];
+
 // Metrobus draws every route in one blue — WMATA's data carries no per-route
 // colour, and the route's name on the pill is what tells them apart. The same
 // #1F5AA6 as the poller's BUS_COLOR, which the panel reduces to RGB565.
@@ -838,6 +854,33 @@ const SYSTEMS = [
     ],
   },
 
+  {
+    id: "cta",
+    title: "Chicago L",
+    subtitle: "CTA",
+    searchHint: "Search stations…",
+    chip: (line) => bulletChip(CTA_COLORS[line] || "#666", line, CTA_DARK_TEXT),
+    lineOrder: CTA_ORDER,
+    // Retro first: it is what a fresh selection starts on, because the firmware
+    // draws the character rows for any system whose design is left empty, and
+    // Chicago's platform signs are the amber LED ones those rows imitate. Modern
+    // is the board with a run number column.
+    //
+    // No arrivingTakeover or arrivingEffect, and no previews, for the reasons
+    // Boston's entry gives.
+    designs: [
+      {
+        id: "classic",
+        title: "Retro",
+      },
+      {
+        id: "modern",
+        title: "Modern",
+        theme: true,
+      },
+    ],
+  },
+
   // ---- Not served yet. Titles are what a rider in that city calls the thing,
   // since that is what the picker is read as.
   {
@@ -872,13 +915,6 @@ const SYSTEMS = [
         title: "Retro",
       },
     ],
-  },
-  {
-    id: "cta",
-    title: "Chicago L",
-    subtitle: "CTA",
-    searchHint: "Search stations…",
-    chip: null,
   },
   {
     id: "mta_bus",
