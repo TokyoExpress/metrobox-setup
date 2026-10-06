@@ -497,6 +497,19 @@
       </select>
     </div>
 
+    <!-- On by default: every display already draws the clock. Off hands its room
+         in the header to the station name. -->
+    <div class="section">
+      <div class="section-label" id="show-time-label">Clock</div>
+      <div class="line-row">
+        <button type="button" id="show-time" class="line-toggle" role="checkbox"
+                aria-checked="true" aria-labelledby="show-time-label show-time-text">
+          <span class="mark" aria-hidden="true"></span>
+          <span class="line-name" id="show-time-text">Show the time in the header</span>
+        </button>
+      </div>
+    </div>
+
     <!-- Dark or light. Shown for every modern board and no retro one, so it
          appears and disappears with the display style chosen above even though
          it now lives in here: it is every agency's setting rather than one
@@ -1427,6 +1440,9 @@ const SWITCH_MIN = 3;
 const SWITCH_MAX = 60;
 const SWITCH_DEFAULT = 5;
 let switchSeconds = SWITCH_DEFAULT;
+// Whether the display's header draws the time. On, like every display already
+// does; off gives the clock's room to the station name.
+let showTime = true;
 
 // The station's lines, and for each the directions ("1", "2") it is shown in.
 // A line with no directions is off. Every line in both directions is the
@@ -1445,6 +1461,13 @@ function stepSwitch(delta) {
   switchSeconds = Math.min(SWITCH_MAX, Math.max(SWITCH_MIN, next));
   clearMessage();
   renderSwitch();
+}
+
+function toggleShowTime() {
+  showTime = !showTime;
+  $("show-time").setAttribute("aria-checked", String(showTime));
+  clearMessage();
+  refreshButton();
 }
 
 function renderSwitch() {
@@ -1943,6 +1966,9 @@ async function save() {
         // "" is automatic: the display shows the time in the city of the system
         // it is set to. Sent on every save, like the dwell above.
         timeZone: $("time-zone").value,
+        // Sent on every save, like the two above: "show" is the default and the
+        // way to turn the clock back on.
+        showTime: showTime ? "show" : "hide",
         lineFilter: lineFilter(),
       }),
     });
@@ -1986,6 +2012,7 @@ syncCode();
 
 $("search").oninput = (e) => renderList(e.target.value);
 $("route-search").oninput = (e) => renderRoutes(e.target.value);
+$("show-time").onclick = toggleShowTime;
 $("switch-down").onclick = () => stepSwitch(-1);
 $("switch-up").onclick = () => stepSwitch(1);
 renderSwitch();
